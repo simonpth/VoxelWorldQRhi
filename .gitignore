@@ -1,0 +1,10 @@
+build
+compile.sh
+run.sh
+
+*.DS_Store
+.vscode
+
+compile.scpt
+compile.app
+compile.sh
