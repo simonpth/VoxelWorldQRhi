@@ -4,7 +4,14 @@ run.sh
 
 *.DS_Store
 .vscode
+.cache
 
-compile.scpt
-compile.app
-compile.sh
+run.scpt
+run.app
+run.sh
+
+copilot*
+
+# ignore for now so i do not mess up with license
+# will be added later
+third_party
