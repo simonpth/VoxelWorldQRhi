@@ -1,13 +1,16 @@
-#include "renderwidget.h"
-#include <QApplication>
+#include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QQmlApplicationEngine>
 
 int main(int argc, char *argv[]) {
-  QApplication a(argc, argv);
-  QLoggingCategory::setFilterRules(QLatin1String("qt.rhi.*=true"));
+  QGuiApplication app(argc, argv);
+  // QLoggingCategory::setFilterRules(QLatin1String("qt.rhi.*=true"));
 
-  RenderWidget w;
-  w.show();
+  QQmlApplicationEngine engine;
+  QObject::connect(
+      &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
+      []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
+  engine.loadFromModule("Client", "Main");
 
-  return a.exec();
+  return app.exec();
 }

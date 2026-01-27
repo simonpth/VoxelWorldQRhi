@@ -37,7 +37,7 @@ public:
            (uint64_t)detailedZ << 2;
   }
 
-  static ChunkMesh generateChunkMesh(const Chunk &chunk);
+  static std::unique_ptr<ChunkMesh> generateChunkMesh(const Chunk &chunk);
 
 private:
   static ChunkFaceMesh generateFaceMesh(const Chunk &chunk, int face);

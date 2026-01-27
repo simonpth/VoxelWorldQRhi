@@ -1,11 +1,13 @@
 #ifndef BLOCKDEFINITIONLOOKUP_H
 #define BLOCKDEFINITIONLOOKUP_H
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 
 struct BlockDefinition {
   std::string name;
+  uint8_t r, g, b, a;
 };
 
 class BlockDefinitionLookup {

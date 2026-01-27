@@ -1,12 +1,13 @@
 #include "chunkmeshgeneration.h"
 #include "block.h"
 
-ChunkMesh ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
-  ChunkMesh chunkMesh;
+std::unique_ptr<ChunkMesh>
+ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
+  std::unique_ptr<ChunkMesh> chunkMesh = std::make_unique<ChunkMesh>();
   for (int face = 0; face < 6; face++) {
-    chunkMesh.faces[face] = generateFaceMesh(chunk, face);
+    chunkMesh->faces[face] = generateFaceMesh(chunk, face);
   }
-  return chunkMesh;
+  return std::move(chunkMesh);
 }
 
 static const int faceOffsets[6][3] = {

@@ -12,7 +12,7 @@ void World::generateRegion(const RegionPos &pos) {
     for (uint8_t y = 0; y < Region::REGION_SIZE; y++) {
       for (uint8_t z = 0; z < Region::REGION_SIZE; z++) {
         region->setChunk(x, y, z,
-                         ChunkGenerator::generateChunk(pos, {x, y, z}));
+                         ChunkGenerator::generateChunk({pos, {x, y, z}}));
       }
     }
   }

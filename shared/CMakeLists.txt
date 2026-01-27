@@ -5,6 +5,7 @@ add_library(voxel-shared STATIC
     src/chunkgeneration.cpp
     src/chunkmeshgeneration.cpp
     src/region.cpp
+    src/world.cpp
 )
 
 target_include_directories(voxel-shared PUBLIC include)
