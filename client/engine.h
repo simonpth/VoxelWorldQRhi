@@ -3,6 +3,7 @@
 
 #include "world.h"
 #include <QObject>
+#include <memory>
 #include <qqmlintegration.h>
 
 // #include "rhirender.h"
@@ -27,7 +28,7 @@ public slots:
   void handleRHIRenderReady();
 
 private:
-  World m_world;
+  std::unique_ptr<World> m_world;
   RHIView *m_rhiView = nullptr;
 };
 

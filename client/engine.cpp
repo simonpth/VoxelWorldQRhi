@@ -3,8 +3,10 @@
 #include <QtCore/qnamespace.h>
 
 Engine::Engine(QObject *parent) : QObject(parent) {
+  m_world.reset(new World());
+
   // placeholder for actual world generation
-  m_world.basicSetup();
+  m_world->basicSetup();
 
   connect(m_rhiView, &RHIView::rhiRenderReady, this,
           &Engine::handleRHIRenderReady);
@@ -19,7 +21,7 @@ void Engine::setRHIView(RHIView *rhiView) {
 }
 
 void Engine::handleRHIRenderReady() {
-  const Region *region = m_world.getRegion({0, 0, 0});
+  const Region *region = m_world->getRegion({0, 0, 0});
   if (!region) {
     return;
   }

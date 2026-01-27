@@ -1,7 +1,6 @@
 #version 440
 
-layout(location = 0) in vec4 position;
-layout(location = 1) in vec3 color;
+layout(location = 0) in uvec2 packed;
 
 layout(location = 0) out vec3 v_color;
 

@@ -89,10 +89,8 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
         getShader(QLatin1String(":/shader.frag.qsb"))}});
 
   QRhiVertexInputLayout inputLayout;
-  inputLayout.setBindings({{5 * sizeof(float)}});
-  inputLayout.setAttributes(
-      {{0, 0, QRhiVertexInputAttribute::Float2, 0},
-       {0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float)}});
+  inputLayout.setBindings({{sizeof(uint64_t)}});
+  inputLayout.setAttributes({{0, 0, QRhiVertexInputAttribute::UInt2, 0}});
   m_pipeline->setVertexInputLayout(inputLayout);
   m_pipeline->setShaderResourceBindings(m_srb.get());
   m_pipeline->setRenderPassDescriptor(
