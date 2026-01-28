@@ -1,6 +1,9 @@
 #include "chunkmeshgeneration.h"
 #include "block.h"
 
+// TODO: for now only face culling
+
+/*
 std::unique_ptr<ChunkMesh>
 ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
   std::unique_ptr<ChunkMesh> chunkMesh = std::make_unique<ChunkMesh>();
@@ -25,13 +28,23 @@ static const int faceAxis[6] = {0, 1, 2, 0, 1, 2};
 
 // Precomputed quad vertex offsets for each face [4 corners][3 coords]
 static const int quadOffsets[6][4][3] = {
-    {{1, 0, 0}, {1, 0, 1}, {1, 1, 1}, {1, 1, 0}}, // x+
-    {{0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}}, // y+
-    {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}, // z+
-    {{0, 0, 1}, {0, 0, 0}, {0, 1, 0}, {0, 1, 1}}, // x-
-    {{0, 0, 1}, {1, 0, 1}, {1, 0, 0}, {0, 0, 0}}, // y-
-    {{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}  // z-
-};
+    // +X (right)
+    {{1, 0, 0}, {1, 0, 1}, {1, 1, 1}, {1, 1, 0}},
+
+    // +Y (top)
+    {{0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}},
+
+    // +Z (front)
+    {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}},
+
+    // -X (left)
+    {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}},
+
+    // -Y (bottom)
+    {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}},
+
+    // -Z (back)
+    {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}}};
 
 // axis 0: w=x, u=y, v=z | axis 1: u=x, w=y, v=z | axis 2: u=x, v=y, w=z
 static const int mapping[3][3] = {
@@ -40,13 +53,26 @@ static const int mapping[3][3] = {
 static void addQuad(ChunkFaceMesh &mesh, uint32_t blockId, int x, int y, int z,
                     int face, int runLength) {
   uint32_t baseIndex = static_cast<uint32_t>(mesh.vertices.size());
-  int pos[3] = {x, y, z};
+  int axis = faceAxis[face];
 
   for (int i = 0; i < 4; i++) {
-    mesh.vertices.push_back(ChunkMeshGenerator::getVertex(
-        blockId, pos[0] + quadOffsets[face][i][0],
-        pos[1] + quadOffsets[face][i][1], pos[2] + quadOffsets[face][i][2],
-        face, 0, 0, 0));
+    int vx = x + quadOffsets[face][i][0];
+    int vy = y + quadOffsets[face][i][1];
+    int vz = z + quadOffsets[face][i][2];
+
+    // Extend the quad along the w-axis (scanning direction)
+    // Corners 1 and 2 should be offset by runLength
+    if (i == 1 || i == 2) {
+      if (axis == 0)
+        vx += runLength - 1;
+      else if (axis == 1)
+        vy += runLength - 1;
+      else
+        vz += runLength - 1;
+    }
+
+    mesh.vertices.push_back(
+        ChunkMeshGenerator::getVertex(blockId, vx, vy, vz, face, 0, 0, 0));
   }
 
   mesh.indices.push_back(baseIndex + 0);
@@ -125,3 +151,4 @@ ChunkFaceMesh ChunkMeshGenerator::generateFaceMesh(const Chunk &chunk,
 
   return faceMesh;
 }
+*/

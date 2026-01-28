@@ -14,7 +14,7 @@ void RHIView::handleWindowChanged(QQuickWindow *win) {
             Qt::DirectConnection);
     connect(win, &QQuickWindow::sceneGraphInvalidated, this, &RHIView::cleanup,
             Qt::DirectConnection);
-    win->setColor(Qt::blue);
+    win->setColor(Qt::black);
   }
 }
 

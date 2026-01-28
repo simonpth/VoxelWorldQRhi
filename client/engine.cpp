@@ -26,16 +26,23 @@ void Engine::handleRHIRenderReady() {
     return;
   }
 
-  for (uint8_t x = 0; x < Region::REGION_SIZE; x++) {
-    for (uint8_t y = 0; y < Region::REGION_SIZE; y++) {
-      for (uint8_t z = 0; z < Region::REGION_SIZE; z++) {
-        const Chunk *chunk = region->getChunk(x, y, z);
-        if (!chunk) {
-          continue;
+  bool smallTestWorld = true;
+  if (smallTestWorld) {
+    m_rhiView->rhiRender()->addChunkMesh(
+        {{0, 0, 0}, {0, 0, 0}},
+        ChunkMeshGenerator::generateChunkMesh(*region->getChunk(0, 0, 0)));
+  } else {
+    for (uint8_t x = 0; x < Region::REGION_SIZE; x++) {
+      for (uint8_t y = 0; y < Region::REGION_SIZE; y++) {
+        for (uint8_t z = 0; z < Region::REGION_SIZE; z++) {
+          const Chunk *chunk = region->getChunk(x, y, z);
+          if (!chunk) {
+            continue;
+          }
+          m_rhiView->rhiRender()->addChunkMesh(
+              {{0, 0, 0}, {x, y, z}},
+              ChunkMeshGenerator::generateChunkMesh(*chunk));
         }
-        m_rhiView->rhiRender()->addChunkMesh(
-            {{0, 0, 0}, {x, y, z}},
-            ChunkMeshGenerator::generateChunkMesh(*chunk));
       }
     }
   }

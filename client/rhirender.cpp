@@ -1,8 +1,11 @@
 #include "rhirender.h"
 #include <QFile>
 #include <QtCore/qdebug.h>
+#include <QtGui/qmatrix4x4.h>
 #include <QtQuick/qquickwindow.h>
 #include <rhi/qrhi.h>
+
+#include <QQuaternion>
 
 RHIRender::RHIRender(QObject *parent) : QObject(parent) {}
 
@@ -37,8 +40,22 @@ void RHIRender::frameStart() {
     initPipeline(rhi, swapChain);
   }
 
-  // update buffers here
+  // Update buffers here
   updateDirtyRenderChunkMeshes(resourceUpdates);
+
+  // MVP buffer
+  const QSize outputPixelSize =
+      swapChain->currentFrameRenderTarget()->pixelSize();
+  QMatrix4x4 mvp;
+  mvp.perspective(
+      60.0f, float(outputPixelSize.width()) / float(outputPixelSize.height()),
+      0.1f, 100.0f);
+  mvp.rotate(QQuaternion::fromEulerAngles(m_cameraRotation));
+  mvp.translate(-m_localPlayerPosition);
+
+  mvp = rhi->clipSpaceCorrMatrix() * mvp;
+
+  resourceUpdates->updateDynamicBuffer(m_ubuf.get(), 0, 64, mvp.data());
 
   swapChain->currentFrameCommandBuffer()->resourceUpdate(resourceUpdates);
 }
@@ -58,7 +75,23 @@ void RHIRender::mainPassRecordingStart() {
   cb->setGraphicsPipeline(m_pipeline.get());
   cb->setShaderResources();
 
-  cb->draw(0);
+  for (auto &renderChunkMesh : m_renderChunkMeshes) {
+    for (int i = 0; i < 3; i++) {
+      if (renderChunkMesh.second->chunkMesh->faces[i].indices.empty())
+        continue;
+
+      const QRhiCommandBuffer::VertexInput vbufBinding(
+          renderChunkMesh.second->vBuffers[i].get(), 0);
+      cb->setVertexInput(0, 1, &vbufBinding,
+                         renderChunkMesh.second->iBuffers[i].get(), 0,
+                         QRhiCommandBuffer::IndexUInt32);
+      cb->drawIndexed(
+          renderChunkMesh.second->chunkMesh->faces[i].indices.size());
+
+      // qDebug() << "drawIndexed" << i << ":"
+      //<< renderChunkMesh.second->chunkMesh->faces[i].vertices.size();
+    }
+  }
 
   auto now = std::chrono::steady_clock::now();
   m_fps = 1.0f / std::chrono::duration_cast<std::chrono::duration<float>>(
@@ -83,6 +116,20 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   m_srb->create();
 
   m_pipeline.reset(rhi->newGraphicsPipeline());
+  m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+  m_pipeline->setDepthTest(true);
+  m_pipeline->setDepthWrite(true);
+  QRhiGraphicsPipeline::TargetBlend blend;
+  blend.enable = true;
+  blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+  blend.srcAlpha = QRhiGraphicsPipeline::SrcAlpha;
+  blend.dstColor = QRhiGraphicsPipeline::One;
+  blend.dstAlpha = QRhiGraphicsPipeline::One;
+  m_pipeline->setTargetBlends({blend});
+
+  // backface culling
+  m_pipeline->setCullMode(QRhiGraphicsPipeline::Back);
+
   m_pipeline->setShaderStages(
       {{QRhiShaderStage::Vertex, getShader(QLatin1String(":/shader.vert.qsb"))},
        {QRhiShaderStage::Fragment,
@@ -92,7 +139,9 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   inputLayout.setBindings({{sizeof(uint64_t)}});
   inputLayout.setAttributes({{0, 0, QRhiVertexInputAttribute::UInt2, 0}});
   m_pipeline->setVertexInputLayout(inputLayout);
+
   m_pipeline->setShaderResourceBindings(m_srb.get());
+
   m_pipeline->setRenderPassDescriptor(
       swapChain->currentFrameRenderTarget()->renderPassDescriptor());
   m_pipeline->create();
@@ -158,6 +207,7 @@ void RHIRender::updateDirtyRenderChunkMeshes(
   m_dirtyRenderChunkMeshes.clear();
 }
 
+// Setters and Getters
 void RHIRender::setPlayerWorldChunkPos(const PlayerWorldChunkPos &position) {
   m_playerWorldChunkPos = position;
 }

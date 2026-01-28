@@ -26,7 +26,8 @@ public:
                             uint8_t face, uint8_t detailedX, uint8_t detailedY,
                             uint8_t detailedZ) {
     // bit wise encoding
-    // id: 32 bits
+    // empty: 16 bits
+    // id: 16 bits
     // face: 3 bits 6 values
     // x, y, z: 9 bits: 5 bits for 0-31 (x,y,z), 4 bits for 0.0-1.0 in 1/8th
     // (detailedX,detailedY,detailedZ)

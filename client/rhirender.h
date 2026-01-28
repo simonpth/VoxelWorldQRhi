@@ -70,9 +70,10 @@ private:
   std::unique_ptr<QRhiShaderResourceBindings> m_srb;
   std::unique_ptr<QRhiGraphicsPipeline> m_pipeline;
 
-  PlayerWorldChunkPos m_playerWorldChunkPos;
-  QVector3D m_localPlayerPosition; // local player position in chunk [0...32]
-  QVector3D m_cameraRotation;
+  PlayerWorldChunkPos m_playerWorldChunkPos = {0, 0, 0};
+  QVector3D m_localPlayerPosition =
+      QVector3D(16.0f, 12.0f, 16.0f); // local player position in chunk [0...32]
+  QVector3D m_cameraRotation = QVector3D(0, 0, 0);
 
   std::unordered_map<WorldChunkPos, std::unique_ptr<RenderChunkMesh>,
                      WorldChunkPosHash>

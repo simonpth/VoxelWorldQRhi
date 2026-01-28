@@ -3,6 +3,7 @@
 
 #include "world.h"
 #include <QObject>
+#include <QThreadPool>
 #include <memory>
 #include <qqmlintegration.h>
 
