@@ -28,20 +28,23 @@ VertexData unpackVertex(uvec2 v)
     uint low  = v.x;
     uint high = v.y;
 
-    // upper 32 bits
-    outv.id   = high;
+    // high: id(0-15), face(16-18)
+    outv.id = extractBits(high, 0u, 16u);
+    outv.face = extractBits(high, 16u, 3u);
 
-    // lower 32 bits
-    outv.face = extractBits(low, 29u, 3u);
+    // low: x(20-29), y(10-19), z(0-9)
+    // each is 6 bits integer + 4 bits fractional
+    uint packX = extractBits(low, 20u, 10u);
+    outv.x  = extractBits(packX, 4u, 6u);
+    outv.dx = extractBits(packX, 0u, 4u);
 
-    outv.x    = extractBits(low, 24u, 5u);
-    outv.dx   = extractBits(low, 20u, 4u);
+    uint packY = extractBits(low, 10u, 10u);
+    outv.y  = extractBits(packY, 4u, 6u);
+    outv.dy = extractBits(packY, 0u, 4u);
 
-    outv.y    = extractBits(low, 15u, 5u);
-    outv.dy   = extractBits(low, 11u, 4u);
-
-    outv.z    = extractBits(low,  6u, 5u);
-    outv.dz   = extractBits(low,  2u, 4u);
+    uint packZ = extractBits(low, 0u, 10u);
+    outv.z  = extractBits(packZ, 4u, 6u);
+    outv.dz = extractBits(packZ, 0u, 4u);
 
     return outv;
 }
@@ -49,7 +52,7 @@ VertexData unpackVertex(uvec2 v)
 vec3 decodePosition(VertexData v)
 {
     vec3 base = vec3(v.x, v.y, v.z);
-    vec3 detail = vec3(v.dx, v.dy, v.dz) / 8.0;
+    vec3 detail = vec3(v.dx, v.dy, v.dz) / 16.0;
     return base + detail;
 }
 

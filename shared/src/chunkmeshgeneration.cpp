@@ -1,33 +1,19 @@
 #include "chunkmeshgeneration.h"
 #include "block.h"
+#include <QtCore/qlogging.h>
 
 // TODO: for now only face culling
 
-/*
 std::unique_ptr<ChunkMesh>
 ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
   std::unique_ptr<ChunkMesh> chunkMesh = std::make_unique<ChunkMesh>();
-  for (int face = 0; face < 6; face++) {
+  for (uint8_t face = 0; face < 6; face++) {
     chunkMesh->faces[face] = generateFaceMesh(chunk, face);
   }
   return std::move(chunkMesh);
 }
 
-static const int faceOffsets[6][3] = {
-    {1, 0, 0},  // x+
-    {0, 1, 0},  // y+
-    {0, 0, 1},  // z+
-    {-1, 0, 0}, // x-
-    {0, -1, 0}, // y-
-    {0, 0, -1}  // z-
-};
-
-// Precomputed: which axis is the "w" (scanning) axis for each face
-// face 0,3 -> axis 0 (x), face 1,4 -> axis 1 (y), face 2,5 -> axis 2 (z)
-static const int faceAxis[6] = {0, 1, 2, 0, 1, 2};
-
-// Precomputed quad vertex offsets for each face [4 corners][3 coords]
-static const int quadOffsets[6][4][3] = {
+static const uint8_t quadOffsets[6][4][3] = {
     // +X (right)
     {{1, 0, 0}, {1, 0, 1}, {1, 1, 1}, {1, 1, 0}},
 
@@ -46,31 +32,23 @@ static const int quadOffsets[6][4][3] = {
     // -Z (back)
     {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}}};
 
-// axis 0: w=x, u=y, v=z | axis 1: u=x, w=y, v=z | axis 2: u=x, v=y, w=z
-static const int mapping[3][3] = {
-    {2, 0, 1}, {0, 2, 1}, {0, 1, 2}}; // [axis][xyz] -> uvw index
-
-static void addQuad(ChunkFaceMesh &mesh, uint32_t blockId, int x, int y, int z,
-                    int face, int runLength) {
+static void addQuad(ChunkFaceMesh &mesh, uint32_t blockId, uint8_t x, uint8_t y,
+                    uint8_t z, uint8_t face, uint8_t runLength) {
   uint32_t baseIndex = static_cast<uint32_t>(mesh.vertices.size());
-  int axis = faceAxis[face];
 
-  for (int i = 0; i < 4; i++) {
-    int vx = x + quadOffsets[face][i][0];
-    int vy = y + quadOffsets[face][i][1];
-    int vz = z + quadOffsets[face][i][2];
-
-    // Extend the quad along the w-axis (scanning direction)
-    // Corners 1 and 2 should be offset by runLength
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t vx = x + quadOffsets[face][i][0];
+    uint8_t vy = y + quadOffsets[face][i][1];
+    uint8_t vz = z + quadOffsets[face][i][2];
     if (i == 1 || i == 2) {
-      if (axis == 0)
+      if (face == 0 || face == 3) {
         vx += runLength - 1;
-      else if (axis == 1)
+      } else if (face == 1 || face == 4) {
         vy += runLength - 1;
-      else
+      } else {
         vz += runLength - 1;
+      }
     }
-
     mesh.vertices.push_back(
         ChunkMeshGenerator::getVertex(blockId, vx, vy, vz, face, 0, 0, 0));
   }
@@ -82,6 +60,55 @@ static void addQuad(ChunkFaceMesh &mesh, uint32_t blockId, int x, int y, int z,
   mesh.indices.push_back(baseIndex + 2);
   mesh.indices.push_back(baseIndex + 3);
 }
+
+static const int faceOffsets[6][3] = {
+    {1, 0, 0},  // x+
+    {0, 1, 0},  // y+
+    {0, 0, 1},  // z+
+    {-1, 0, 0}, // x-
+    {0, -1, 0}, // y-
+    {0, 0, -1}  // z-
+};
+
+ChunkFaceMesh ChunkMeshGenerator::generateFaceMesh(const Chunk &chunk,
+                                                   uint8_t face) {
+  ChunkFaceMesh faceMesh;
+
+  for (uint8_t i = 0; i < Chunk::CHUNK_SIZE; i++) {
+    for (uint8_t j = 0; j < Chunk::CHUNK_SIZE; j++) {
+      for (uint8_t k = 0; k < Chunk::CHUNK_SIZE; k++) {
+        const Block &block = chunk.getBlock((int)i, (int)j, (int)k);
+        if (block.isSolid()) {
+          int nx = i + faceOffsets[face][0];
+          int ny = j + faceOffsets[face][1];
+          int nz = k + faceOffsets[face][2];
+          if (nx >= 0 && nx < Chunk::CHUNK_SIZE && ny >= 0 &&
+              ny < Chunk::CHUNK_SIZE && nz >= 0 && nz < Chunk::CHUNK_SIZE) {
+            const Block &neighborBlock = chunk.getBlock(nx, ny, nz);
+            if (neighborBlock.isSolid()) {
+              continue;
+            }
+          }
+          addQuad(faceMesh, block.id, i, j, k, face, 1);
+        } else {
+          // TODO: add slabs/stairs and detailed block meshing
+        }
+      }
+    }
+  }
+
+  return faceMesh;
+}
+
+/*
+
+// Precomputed: which axis is the "w" (scanning) axis for each face
+// face 0,3 -> axis 0 (x), face 1,4 -> axis 1 (y), face 2,5 -> axis 2 (z)
+static const int faceAxis[6] = {0, 1, 2, 0, 1, 2};
+
+// axis 0: w=x, u=y, v=z | axis 1: u=x, w=y, v=z | axis 2: u=x, v=y, w=z
+static const int mapping[3][3] = {
+    {2, 0, 1}, {0, 2, 1}, {0, 1, 2}}; // [axis][xyz] -> uvw index
 
 // Convert (u, v, w) to (x, y, z) based on face axis
 static inline void uvwToXYZ(int u, int v, int w, int face, int &x, int &y,

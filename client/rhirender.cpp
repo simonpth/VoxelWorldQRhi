@@ -1,6 +1,7 @@
 #include "rhirender.h"
 #include <QFile>
 #include <QtCore/qdebug.h>
+#include <QtCore/qtypes.h>
 #include <QtGui/qmatrix4x4.h>
 #include <QtQuick/qquickwindow.h>
 #include <rhi/qrhi.h>
@@ -49,7 +50,7 @@ void RHIRender::frameStart() {
   QMatrix4x4 mvp;
   mvp.perspective(
       60.0f, float(outputPixelSize.width()) / float(outputPixelSize.height()),
-      0.1f, 100.0f);
+      0.1f, 1000000.0f);
   mvp.rotate(QQuaternion::fromEulerAngles(m_cameraRotation));
   mvp.translate(-m_localPlayerPosition);
 
@@ -59,6 +60,8 @@ void RHIRender::frameStart() {
 
   swapChain->currentFrameCommandBuffer()->resourceUpdate(resourceUpdates);
 }
+
+static auto startTime = std::chrono::steady_clock::now();
 
 void RHIRender::mainPassRecordingStart() {
   QRhi *rhi = m_window->rhi();
@@ -76,7 +79,17 @@ void RHIRender::mainPassRecordingStart() {
   cb->setShaderResources();
 
   for (auto &renderChunkMesh : m_renderChunkMeshes) {
-    for (int i = 0; i < 3; i++) {
+
+    int faceDraw = 0;
+
+    // get time since prog start
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::duration<float>>(
+                       now - startTime)
+                       .count();
+    faceDraw = (int)(elapsed) % 6;
+
+    for (int i = faceDraw; i < faceDraw + 1; i++) {
       if (renderChunkMesh.second->chunkMesh->faces[i].indices.empty())
         continue;
 
@@ -88,8 +101,29 @@ void RHIRender::mainPassRecordingStart() {
       cb->drawIndexed(
           renderChunkMesh.second->chunkMesh->faces[i].indices.size());
 
-      // qDebug() << "drawIndexed" << i << ":"
-      //<< renderChunkMesh.second->chunkMesh->faces[i].vertices.size();
+      uint64_t packed = renderChunkMesh.second->chunkMesh->faces[i].vertices[0];
+      uint32_t low = (uint32_t)(packed & 0xFFFFFFFF);
+      uint32_t high = (uint32_t)(packed >> 32);
+
+      uint8_t face = (high >> 16) & 0x7u;
+
+      uint32_t packX = (low >> 20) & 0x3FFu;
+      uint8_t x = (packX >> 4) & 0x3Fu;
+      uint8_t detailedX = packX & 0xFu;
+
+      uint32_t packY = (low >> 10) & 0x3FFu;
+      uint8_t y = (packY >> 4) & 0x3Fu;
+      uint8_t detailedY = packY & 0xFu;
+
+      uint32_t packZ = low & 0x3FFu;
+      uint8_t z = (packZ >> 4) & 0x3Fu;
+      uint8_t detailedZ = packZ & 0xFu;
+
+      qDebug() << "drawIndexed" << i << ":" << face << ":" << x << ":" << y
+               << ":" << z << ":" << detailedX << ":" << detailedY << ":"
+               << detailedZ << ":"
+               << renderChunkMesh.second->chunkMesh->faces[i].indices.size() /
+                      6;
     }
   }
 
@@ -116,9 +150,12 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   m_srb->create();
 
   m_pipeline.reset(rhi->newGraphicsPipeline());
-  m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+  m_pipeline->setCullMode(QRhiGraphicsPipeline::Front);
+  m_pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
   m_pipeline->setDepthTest(true);
   m_pipeline->setDepthWrite(true);
+
+  /*
   QRhiGraphicsPipeline::TargetBlend blend;
   blend.enable = true;
   blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
@@ -126,10 +163,9 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   blend.dstColor = QRhiGraphicsPipeline::One;
   blend.dstAlpha = QRhiGraphicsPipeline::One;
   m_pipeline->setTargetBlends({blend});
+  */
 
   // backface culling
-  m_pipeline->setCullMode(QRhiGraphicsPipeline::Back);
-
   m_pipeline->setShaderStages(
       {{QRhiShaderStage::Vertex, getShader(QLatin1String(":/shader.vert.qsb"))},
        {QRhiShaderStage::Fragment,
