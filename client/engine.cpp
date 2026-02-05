@@ -1,51 +1,35 @@
 #include "engine.h"
-#include "region.h"
-#include <QtCore/qnamespace.h>
 
 Engine::Engine(QObject *parent) : QObject(parent) {
+  // setup world
   m_world.reset(new World());
-
   // placeholder for actual world generation
   m_world->basicSetup();
 
-  connect(m_rhiView, &RHIView::rhiRenderReady, this,
-          &Engine::handleRHIRenderReady);
+  // Setup game loop
+  m_gameLoop = new GameLoop(this, m_world.get());
+  m_gameLoop->moveToThread(&m_gameLoopThread);
+  connect(&m_gameLoopThread, &QThread::started, m_gameLoop, &GameLoop::start);
+  m_gameLoopThread.setObjectName("GameLoopThread");
+  m_gameLoopThread.start();
 }
 
-Engine::~Engine() {}
+Engine::~Engine() {
+  m_gameLoop->stop();
+  m_gameLoopThread.quit();
+  m_gameLoopThread.wait();
 
-void Engine::setRHIView(RHIView *rhiView) {
-  m_rhiView = rhiView;
-  connect(m_rhiView, &RHIView::rhiRenderReady, this,
-          &Engine::handleRHIRenderReady);
+  delete m_gameLoop;
 }
 
-void Engine::handleRHIRenderReady() {
-  const Region *region = m_world->getRegion({0, 0, 0});
-  if (!region) {
+void Engine::startGameLoop() { m_gameLoop->start(); }
+void Engine::stopGameLoop() { m_gameLoop->stop(); }
+
+void Engine::moveMouseToCenter(QQuickWindow *window) {
+  if (!window)
     return;
-  }
 
-  bool smallTestWorld = true;
-  if (smallTestWorld) {
-    m_rhiView->rhiRender()->addChunkMesh(
-        {{0, 0, 0}, {0, 0, 0}},
-        ChunkMeshGenerator::generateChunkMesh(*region->getChunk(0, 0, 0)));
-  } else {
-    for (uint8_t x = 0; x < Region::REGION_SIZE; x++) {
-      for (uint8_t y = 0; y < Region::REGION_SIZE; y++) {
-        for (uint8_t z = 0; z < Region::REGION_SIZE; z++) {
-          const Chunk *chunk = region->getChunk(x, y, z);
-          if (!chunk) {
-            continue;
-          }
-          m_rhiView->rhiRender()->addChunkMesh(
-              {{0, 0, 0}, {x, y, z}},
-              ChunkMeshGenerator::generateChunkMesh(*chunk));
-        }
-      }
-    }
-  }
+  QPoint center =
+      window->mapToGlobal(QPoint(window->width() / 2, window->height() / 2));
+  QCursor::setPos(center);
 }
-
-void Engine::tick() {}

@@ -30,6 +30,7 @@ qt_add_qml_module(appClient
         Main.qml
     SOURCES
         engine.h engine.cpp
+        gameloop.h gameloop.cpp
         rhirender.h rhirender.cpp
         rhiview.h rhiview.cpp
 )

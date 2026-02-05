@@ -11,21 +11,21 @@ public:
   static constexpr int CHUNK_SIZE = 32;
   static constexpr int CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
-  const Block &getBlock(int x, int y, int z) const {
+  const Block &block(int x, int y, int z) const {
     return m_blocks[localIndex(x, y, z)];
   }
   void setBlock(int x, int y, int z, const Block &block) {
     m_blocks[localIndex(x, y, z)] = block;
   }
 
-  const DetailedBlock &getDetailedBlock(int x, int y, int z) const {
+  const DetailedBlock &detailedBlock(int x, int y, int z) const {
     return m_detailedBlocks.at(localDetailedIndex(x, y, z));
   }
   void setDetailedBlock(int x, int y, int z,
                         const DetailedBlock &detailedBlock) {
     m_detailedBlocks[localDetailedIndex(x, y, z)] = detailedBlock;
   }
-  int getDetailedBlockCount() const { return m_detailedBlocks.size(); }
+  int detailedBlockCount() const { return m_detailedBlocks.size(); }
 
   Chunk();
   ~Chunk();

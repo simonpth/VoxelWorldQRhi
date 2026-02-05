@@ -9,6 +9,10 @@ layout(std140, binding = 0) uniform buf {
     mat4 mvp;
 };
 
+layout(std140, binding = 1) uniform buf2 {
+    uint relativeChunkPos;
+};
+
 uint extractBits(uint value, uint shift, uint bits)
 {
     return (value >> shift) & ((1u << bits) - 1u);
@@ -70,19 +74,22 @@ void main()
     // m_blockDefinitions.insert({4, BlockDefinition{"cobblestone"}});
     // m_blockDefinitions.insert({5, BlockDefinition{"planks"}});
 
-    if(v.id == 1) {
-        v_color = vec4(1.0, 0.0, 1.0, 1.0);
-    } else if(v.id == 2) {
+    if(v.id == 1) { // stone should be grey
+        v_color = vec4(0.5, 0.5, 0.5, 1.0);
+    } else if(v.id == 2) { // grass should be green
         v_color = vec4(0.0, 1.0, 0.0, 1.0);
-    } else if(v.id == 3) {
-        v_color = vec4(1.0, 0.0, 0.0, 1.0);
-    } else if(v.id == 4) {
-        v_color = vec4(1.0, 1.0, 0.0, 1.0);
-    } else if(v.id == 5) {
-        v_color = vec4(1.0, 0.0, 1.0, 1.0);
+    } else if(v.id == 3) { // dirt should be brown
+        v_color = vec4(0.5, 0.25, 0.0, 1.0);
+    } else if(v.id == 4) { // cobblestone should be grey
+        v_color = vec4(0.5, 0.5, 0.5, 1.0);
+    } else if(v.id == 5) { // planks should be brown
+        v_color = vec4(0.5, 0.25, 0.0, 1.0);
+    } else {
+        v_color = vec4(1.0, 1.0, 1.0, 1.0);
     }
 
     v_face = v.face;
 
-    gl_Position = mvp * vec4(position, 1.0);
+    vec3 worldPos = position + vec3(relativeChunkPos * 32);
+    gl_Position = mvp * vec4(worldPos, 1.0);
 }

@@ -1,12 +1,17 @@
 #include "rhirender.h"
+#include "chunkmeshgeneration.h"
+#include "world.h"
 #include <QFile>
 #include <QtCore/qdebug.h>
 #include <QtCore/qtypes.h>
 #include <QtGui/qmatrix4x4.h>
 #include <QtQuick/qquickwindow.h>
+#include <cstdint>
 #include <rhi/qrhi.h>
 
 #include <QQuaternion>
+
+#include <QThreadPool>
 
 RHIRender::RHIRender(QObject *parent) : QObject(parent) {}
 
@@ -21,9 +26,11 @@ static QShader getShader(const QString &name) {
   return QShader::fromSerialized(f.readAll());
 }
 
-void RHIRender::setWindow(QQuickWindow *window) { m_window = window; }
-
 void RHIRender::frameStart() {
+  if (!m_engine) {
+    return;
+  }
+
   QRhi *rhi = m_window->rhi();
   if (!rhi) {
     qWarning("QQuickWindow is not using QRhi for rendering");
@@ -42,28 +49,22 @@ void RHIRender::frameStart() {
   }
 
   // Update buffers here
-  updateDirtyRenderChunkMeshes(resourceUpdates);
+
+  // Chunk mesh updates
+  doOneTaskFromChunkUpdateQueue();
+  checkRegionUpdates();
 
   // MVP buffer
-  const QSize outputPixelSize =
-      swapChain->currentFrameRenderTarget()->pixelSize();
-  QMatrix4x4 mvp;
-  mvp.perspective(
-      60.0f, float(outputPixelSize.width()) / float(outputPixelSize.height()),
-      0.1f, 1000000.0f);
-  mvp.rotate(QQuaternion::fromEulerAngles(m_cameraRotation));
-  mvp.translate(-m_localPlayerPosition);
-
-  mvp = rhi->clipSpaceCorrMatrix() * mvp;
-
-  resourceUpdates->updateDynamicBuffer(m_ubuf.get(), 0, 64, mvp.data());
+  updateMVPBuffer(rhi, swapChain, resourceUpdates);
 
   swapChain->currentFrameCommandBuffer()->resourceUpdate(resourceUpdates);
 }
 
-static auto startTime = std::chrono::steady_clock::now();
-
 void RHIRender::mainPassRecordingStart() {
+  if (!m_engine) {
+    return;
+  }
+
   QRhi *rhi = m_window->rhi();
   QRhiSwapChain *swapChain = m_window->swapChain();
   if (!rhi || !swapChain)
@@ -76,61 +77,16 @@ void RHIRender::mainPassRecordingStart() {
   cb->setViewport({0.0f, 0.0f, float(outputPixelSize.width()),
                    float(outputPixelSize.height())});
   cb->setGraphicsPipeline(m_pipeline.get());
+
   cb->setShaderResources();
 
-  for (auto &renderChunkMesh : m_renderChunkMeshes) {
-
-    int faceDraw = 0;
-
-    // get time since prog start
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::duration<float>>(
-                       now - startTime)
-                       .count();
-    faceDraw = (int)(elapsed) % 6;
-
-    for (int i = faceDraw; i < faceDraw + 1; i++) {
-      if (renderChunkMesh.second->chunkMesh->faces[i].indices.empty())
-        continue;
-
-      const QRhiCommandBuffer::VertexInput vbufBinding(
-          renderChunkMesh.second->vBuffers[i].get(), 0);
-      cb->setVertexInput(0, 1, &vbufBinding,
-                         renderChunkMesh.second->iBuffers[i].get(), 0,
-                         QRhiCommandBuffer::IndexUInt32);
-      cb->drawIndexed(
-          renderChunkMesh.second->chunkMesh->faces[i].indices.size());
-
-      uint64_t packed = renderChunkMesh.second->chunkMesh->faces[i].vertices[0];
-      uint32_t low = (uint32_t)(packed & 0xFFFFFFFF);
-      uint32_t high = (uint32_t)(packed >> 32);
-
-      uint8_t face = (high >> 16) & 0x7u;
-
-      uint32_t packX = (low >> 20) & 0x3FFu;
-      uint8_t x = (packX >> 4) & 0x3Fu;
-      uint8_t detailedX = packX & 0xFu;
-
-      uint32_t packY = (low >> 10) & 0x3FFu;
-      uint8_t y = (packY >> 4) & 0x3Fu;
-      uint8_t detailedY = packY & 0xFu;
-
-      uint32_t packZ = low & 0x3FFu;
-      uint8_t z = (packZ >> 4) & 0x3Fu;
-      uint8_t detailedZ = packZ & 0xFu;
-
-      qDebug() << "drawIndexed" << i << ":" << face << ":" << x << ":" << y
-               << ":" << z << ":" << detailedX << ":" << detailedY << ":"
-               << detailedZ << ":"
-               << renderChunkMesh.second->chunkMesh->faces[i].indices.size() /
-                      6;
-    }
-  }
+  // TODO: draw chunk meshes using instancing
 
   auto now = std::chrono::steady_clock::now();
-  m_fps = 1.0f / std::chrono::duration_cast<std::chrono::duration<float>>(
-                     now - m_lastFrameTime)
-                     .count();
+  float deltaTime = std::chrono::duration_cast<std::chrono::duration<float>>(
+                        now - m_lastFrameTime)
+                        .count();
+  m_fps = 1.0f / deltaTime;
   m_lastFrameTime = now;
 
   m_window->update();
@@ -142,16 +98,25 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
       rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64));
   m_ubuf->create();
 
+  // uint32_t is 4 bytes; for every chunk we store 1 uint32
+  m_relativeChunkPosUbuf.reset(
+      rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 4));
+  m_relativeChunkPosUbuf->create();
+
   m_srb.reset(rhi->newShaderResourceBindings());
   m_srb->setBindings({
       QRhiShaderResourceBinding::uniformBuffer(
           0, QRhiShaderResourceBinding::VertexStage, m_ubuf.get()),
+      QRhiShaderResourceBinding::uniformBuffer(
+          1, QRhiShaderResourceBinding::VertexStage,
+          m_relativeChunkPosUbuf.get()),
   });
   m_srb->create();
 
   m_pipeline.reset(rhi->newGraphicsPipeline());
-  m_pipeline->setCullMode(QRhiGraphicsPipeline::Front);
-  m_pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
+  // backface culling
+  m_pipeline->setCullMode(QRhiGraphicsPipeline::Back);
+  m_pipeline->setTopology(QRhiGraphicsPipeline::Lines);
   m_pipeline->setDepthTest(true);
   m_pipeline->setDepthWrite(true);
 
@@ -165,7 +130,6 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   m_pipeline->setTargetBlends({blend});
   */
 
-  // backface culling
   m_pipeline->setShaderStages(
       {{QRhiShaderStage::Vertex, getShader(QLatin1String(":/shader.vert.qsb"))},
        {QRhiShaderStage::Fragment,
@@ -183,85 +147,90 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
   m_pipeline->create();
 }
 
-void RHIRender::addChunkMesh(const WorldChunkPos &chunkPos,
-                             std::unique_ptr<ChunkMesh> chunkMesh) {
-  std::unique_ptr<RenderChunkMesh> renderChunkMesh =
-      std::make_unique<RenderChunkMesh>(std::move(chunkMesh), m_window->rhi());
+void RHIRender::updateMVPBuffer(QRhi *rhi, QRhiSwapChain *swapChain,
+                                QRhiResourceUpdateBatch *resourceUpdates) {
+  const QSize outputPixelSize =
+      swapChain->currentFrameRenderTarget()->pixelSize();
+  QMatrix4x4 mvp;
+  mvp.perspective(
+      60.0f, float(outputPixelSize.width()) / float(outputPixelSize.height()),
+      0.1f, 1000000.0f);
+  mvp.rotate(m_engine->gameLoop()->cameraRotation().x(), 1.0f, 0.0f, 0.0f);
+  mvp.rotate(m_engine->gameLoop()->cameraRotation().y(), 0.0f, 1.0f, 0.0f);
+  mvp.translate(-m_engine->gameLoop()->localPlayerPosition());
 
-  m_dirtyRenderChunkMeshes.push_back(renderChunkMesh.get());
+  mvp = rhi->clipSpaceCorrMatrix() * mvp;
 
-  m_renderChunkMeshes[chunkPos] = std::move(renderChunkMesh);
+  resourceUpdates->updateDynamicBuffer(m_ubuf.get(), 0, 64, mvp.data());
 }
 
-void RHIRender::removeChunkMesh(const WorldChunkPos &chunkPos) {
-  m_renderChunkMeshes.erase(chunkPos);
-}
-
-void RHIRender::updateChunkMesh(const WorldChunkPos &chunkPos,
-                                std::unique_ptr<ChunkMesh> chunkMesh) {
-  auto it = m_renderChunkMeshes.find(chunkPos);
-  if (it != m_renderChunkMeshes.end()) {
-    RenderChunkMesh *renderChunkMesh = it->second.get();
-    renderChunkMesh->chunkMesh = std::move(chunkMesh);
-
-    for (int i = 0; i < 6; i++) {
-      renderChunkMesh->vBuffers[i]->setSize(
-          renderChunkMesh->chunkMesh->faces[i].vertices.size() *
-          sizeof(uint64_t));
-      renderChunkMesh->vBuffers[i]->create();
-      renderChunkMesh->iBuffers[i]->setSize(
-          renderChunkMesh->chunkMesh->faces[i].indices.size() *
-          sizeof(uint32_t));
-      renderChunkMesh->iBuffers[i]->create();
-    }
-
-    m_dirtyRenderChunkMeshes.push_back(renderChunkMesh);
-  }
-}
-
-void RHIRender::updateDirtyRenderChunkMeshes(
-    QRhiResourceUpdateBatch *resourceUpdates) {
-
-  if (m_dirtyRenderChunkMeshes.empty()) {
+void RHIRender::doOneTaskFromChunkUpdateQueue() {
+  std::lock_guard<std::mutex> lock(m_chunkUpdateMutex);
+  if (m_chunkUpdateQueue.empty()) {
     return;
   }
-  qDebug() << "updateDirtyRenderChunkMeshes" << m_dirtyRenderChunkMeshes.size();
-  for (RenderChunkMesh *renderChunkMesh : m_dirtyRenderChunkMeshes) {
-    for (int i = 0; i < 6; i++) {
-      resourceUpdates->uploadStaticBuffer(
-          renderChunkMesh->vBuffers[i].get(), 0,
-          renderChunkMesh->chunkMesh->faces[i].vertices.size() *
-              sizeof(uint64_t),
-          renderChunkMesh->chunkMesh->faces[i].vertices.data());
-      resourceUpdates->uploadStaticBuffer(
-          renderChunkMesh->iBuffers[i].get(), 0,
-          renderChunkMesh->chunkMesh->faces[i].indices.size() *
-              sizeof(uint32_t),
-          renderChunkMesh->chunkMesh->faces[i].indices.data());
+  auto [chunkPos, remove, chunkMesh] = std::move(m_chunkUpdateQueue.front());
+  m_chunkUpdateQueue.pop();
+
+  if (remove) {
+    m_renderChunkMeshes.erase(chunkPos);
+    return;
+  }
+
+  if (!chunkMesh) {
+    qWarning() << "Chunk mesh is null";
+    return;
+  }
+
+  if (!m_renderChunkMeshes.count(chunkPos)) {
+    // add this chunk mesh to the render chunk meshes
+    m_renderChunkMeshes[chunkPos] = std::make_unique<RenderChunkMesh>(
+        std::move(chunkMesh), m_window->rhi());
+  } else {
+    // update this chunk mesh
+    m_renderChunkMeshes[chunkPos]->updateChunkMesh(std::move(chunkMesh),
+                                                   m_window->rhi());
+  }
+}
+
+void RHIRender::checkRegionUpdates() {
+  if (m_engine->gameLoop()->regionsRenderedDirty()) {
+    resizeRelativeChunkPosUbuf();
+
+    auto regionsRendered = m_engine->gameLoop()->regionsRendered();
+    for (auto &regionPos : regionsRendered) {
+      if (!m_renderChunkMeshes.count(WorldChunkPos(regionPos, {0, 0, 0}))) {
+        const Region *region = m_engine->world()->region(regionPos);
+        if (!region) {
+          qWarning() << "Region not found";
+          continue;
+        }
+        for (uint8_t x = 0; x < Region::REGION_SIZE; x++) {
+          for (uint8_t y = 0; y < Region::REGION_SIZE; y++) {
+            for (uint8_t z = 0; z < Region::REGION_SIZE; z++) {
+              WorldChunkPos chunkPos(regionPos, {x, y, z});
+              QThreadPool::globalInstance()->start(
+                  [this, chunkPos, region, x, y, z]() {
+                    addChunkUpdateTask(chunkPos, false,
+                                       ChunkMeshGenerator::generateChunkMesh(
+                                           region->chunk(x, y, z)));
+                  });
+            }
+          }
+        }
+      }
+
+      m_engine->gameLoop()->setRegionsRenderedDirty(false);
     }
   }
-  m_dirtyRenderChunkMeshes.clear();
 }
 
-// Setters and Getters
-void RHIRender::setPlayerWorldChunkPos(const PlayerWorldChunkPos &position) {
-  m_playerWorldChunkPos = position;
+void RHIRender::resizeRelativeChunkPosUbuf() {
+  int regionsRenderedSize = m_engine->gameLoop()->regionsRenderedSize();
+  if (m_relativeChunkPosUbuf->size() !=
+      regionsRenderedSize * Region::REGION_VOLUME * sizeof(uint32_t)) {
+    m_relativeChunkPosUbuf->setSize(regionsRenderedSize *
+                                    Region::REGION_VOLUME * sizeof(uint32_t));
+    m_relativeChunkPosUbuf->create();
+  }
 }
-
-PlayerWorldChunkPos RHIRender::playerWorldChunkPos() const {
-  return m_playerWorldChunkPos;
-}
-
-void RHIRender::setLocalPlayerPosition(const QVector3D &position) {
-  m_localPlayerPosition = position;
-}
-
-QVector3D RHIRender::localPlayerPosition() const {
-  return m_localPlayerPosition;
-}
-
-void RHIRender::setCameraRotation(const QVector3D &rotation) {
-  m_cameraRotation = rotation;
-}
-
-QVector3D RHIRender::cameraRotation() const { return m_cameraRotation; }

@@ -11,7 +11,9 @@ run.app
 run.sh
 
 copilot*
+.qtcreator
 
 # ignore for now so i do not mess up with license
 # will be added later
 third_party
+

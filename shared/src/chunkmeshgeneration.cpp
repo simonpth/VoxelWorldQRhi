@@ -5,7 +5,7 @@
 // TODO: for now only face culling
 
 std::unique_ptr<ChunkMesh>
-ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
+ChunkMeshGenerator::generateChunkMesh(const Chunk *chunk) {
   std::unique_ptr<ChunkMesh> chunkMesh = std::make_unique<ChunkMesh>();
   for (uint8_t face = 0; face < 6; face++) {
     chunkMesh->faces[face] = generateFaceMesh(chunk, face);
@@ -15,10 +15,10 @@ ChunkMeshGenerator::generateChunkMesh(const Chunk &chunk) {
 
 static const uint8_t quadOffsets[6][4][3] = {
     // +X (right)
-    {{1, 0, 0}, {1, 0, 1}, {1, 1, 1}, {1, 1, 0}},
+    {{1, 0, 0}, {1, 1, 0}, {1, 1, 1}, {1, 0, 1}},
 
     // +Y (top)
-    {{0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}},
+    {{0, 1, 0}, {0, 1, 1}, {1, 1, 1}, {1, 1, 0}},
 
     // +Z (front)
     {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}},
@@ -30,7 +30,7 @@ static const uint8_t quadOffsets[6][4][3] = {
     {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}},
 
     // -Z (back)
-    {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}}};
+    {{0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}}};
 
 static void addQuad(ChunkFaceMesh &mesh, uint32_t blockId, uint8_t x, uint8_t y,
                     uint8_t z, uint8_t face, uint8_t runLength) {
@@ -70,21 +70,21 @@ static const int faceOffsets[6][3] = {
     {0, 0, -1}  // z-
 };
 
-ChunkFaceMesh ChunkMeshGenerator::generateFaceMesh(const Chunk &chunk,
+ChunkFaceMesh ChunkMeshGenerator::generateFaceMesh(const Chunk *chunk,
                                                    uint8_t face) {
   ChunkFaceMesh faceMesh;
 
   for (uint8_t i = 0; i < Chunk::CHUNK_SIZE; i++) {
     for (uint8_t j = 0; j < Chunk::CHUNK_SIZE; j++) {
       for (uint8_t k = 0; k < Chunk::CHUNK_SIZE; k++) {
-        const Block &block = chunk.getBlock((int)i, (int)j, (int)k);
+        const Block &block = chunk->block((int)i, (int)j, (int)k);
         if (block.isSolid()) {
           int nx = i + faceOffsets[face][0];
           int ny = j + faceOffsets[face][1];
           int nz = k + faceOffsets[face][2];
           if (nx >= 0 && nx < Chunk::CHUNK_SIZE && ny >= 0 &&
               ny < Chunk::CHUNK_SIZE && nz >= 0 && nz < Chunk::CHUNK_SIZE) {
-            const Block &neighborBlock = chunk.getBlock(nx, ny, nz);
+            const Block &neighborBlock = chunk->block(nx, ny, nz);
             if (neighborBlock.isSolid()) {
               continue;
             }

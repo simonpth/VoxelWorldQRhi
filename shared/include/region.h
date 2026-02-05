@@ -18,10 +18,10 @@ struct ChunkPos {
 
 class Region {
 public:
-  static constexpr int REGION_SIZE = 16;
+  static constexpr int REGION_SIZE = 4;
   static constexpr int REGION_VOLUME = REGION_SIZE * REGION_SIZE * REGION_SIZE;
 
-  const Chunk *getChunk(uint8_t x, uint8_t y, uint8_t z) const {
+  const Chunk *chunk(uint8_t x, uint8_t y, uint8_t z) const {
     return m_chunks[localIndex(x, y, z)].get();
   }
   void setChunk(uint8_t x, uint8_t y, uint8_t z, std::unique_ptr<Chunk> chunk) {

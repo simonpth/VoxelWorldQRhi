@@ -1,36 +1,41 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include "gameloop.h"
 #include "world.h"
+
+#include <QCursor>
 #include <QObject>
-#include <QThreadPool>
+#include <QQuickWindow>
+#include <QThread>
 #include <memory>
 #include <qqmlintegration.h>
-
-// #include "rhirender.h"
-#include "rhiview.h"
 
 class Engine : public QObject {
   Q_OBJECT
   QML_ELEMENT
   QML_SINGLETON
-  Q_PROPERTY(RHIView *rhiView READ rhiView WRITE setRHIView)
+  Q_PROPERTY(GameLoop *gameLoop READ gameLoop)
 
 public:
   explicit Engine(QObject *parent = nullptr);
   ~Engine();
 
-  void tick();
+  void startGameLoop();
+  void stopGameLoop();
 
-  RHIView *rhiView() const { return m_rhiView; }
-  void setRHIView(RHIView *rhiView);
+  GameLoop *gameLoop() const { return m_gameLoop; }
+
+  World *world() const { return m_world.get(); }
 
 public slots:
-  void handleRHIRenderReady();
+  void moveMouseToCenter(QQuickWindow *window);
 
 private:
   std::unique_ptr<World> m_world;
-  RHIView *m_rhiView = nullptr;
+
+  QThread m_gameLoopThread;
+  GameLoop *m_gameLoop;
 };
 
 #endif // ENGINE_H

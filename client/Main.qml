@@ -2,46 +2,66 @@ import QtQuick
 import Client
 
 Window {
+    id: rootWindow
     visible: true
     width: 640
     height: 480
     title: qsTr("Hello Voxel World")
 
+    Item {
+        id: inputHandler
+        anchors.fill: parent
+
+        focus: true
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Escape) {
+                mouseLock.active = false;
+            }
+            Engine.gameLoop.handleKeyPressed(event.key);
+        }
+        Keys.onReleased: event => {
+            Engine.gameLoop.handleKeyReleased(event.key);
+        }
+
+        MouseArea {
+            id: mouseArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: mouseLock.active ? Qt.BlankCursor : Qt.ArrowCursor
+
+            property QtObject mouseLock: QtObject {
+                id: mouseLock
+                property bool active: false
+            }
+
+            onPressed: {
+                mouseLock.active = true;
+                Engine.moveMouseToCenter(rootWindow);
+            }
+
+            onPositionChanged: mouse => {
+                if (!mouseLock.active)
+                    return;
+
+                let centerX = width / 2;
+                let centerY = height / 2;
+                let dx = mouse.x - centerX;
+                let dy = mouse.y - centerY;
+
+                if (dx === 0 && dy === 0)
+                    return;
+
+                Engine.gameLoop.handleMouseDelta(Qt.vector2d(dx, dy));
+                Engine.moveMouseToCenter(rootWindow);
+            }
+        }
+    }
+
     RHIView {
         id: rhiView
 
         Component.onCompleted: {
-            Engine.rhiView = rhiView;
-        }
-
-        focus: true
-        Keys.onPressed: event => {
-            switch (event.key) {
-            case Qt.Key_W:
-                rhiView.localPlayerPosition.z += 1;
-                break;
-            case Qt.Key_S:
-                rhiView.localPlayerPosition.z -= 1;
-                break;
-            case Qt.Key_A:
-                rhiView.localPlayerPosition.x -= 1;
-                break;
-            case Qt.Key_D:
-                rhiView.localPlayerPosition.x += 1;
-                break;
-            case Qt.Key_Up:
-                rhiView.cameraRotation.x += 1;
-                break;
-            case Qt.Key_Down:
-                rhiView.cameraRotation.x -= 1;
-                break;
-            case Qt.Key_Left:
-                rhiView.cameraRotation.y += 1;
-                break;
-            case Qt.Key_Right:
-                rhiView.cameraRotation.y -= 1;
-                break;
-            }
+            rhiView.setEngine(Engine);
         }
     }
 
@@ -58,8 +78,20 @@ Window {
             interval: 50
             running: true
             repeat: true
+
+            function getText() {
+                var text = "FPS: ";
+                text += Math.round(rhiView.fps) + "\n";
+                text += "Player World Chunk Pos: " + Engine.gameLoop.getPlayerWorldChunkPosString() + "\n";
+                text += "Local Player Position: " + Engine.gameLoop.localPlayerPosition + "\n";
+                text += "Camera Rotation: " + Engine.gameLoop.cameraRotation + "\n";
+                text += "Velocity: " + Engine.gameLoop.velocity + "\n";
+                text += "Speed: " + Engine.gameLoop.velocity.length();
+                return text;
+            }
+
             onTriggered: {
-                fpsText.text = "FPS: " + Math.round(rhiView.fps) + " Pos: " + rhiView.localPlayerPosition + " Rot: " + rhiView.cameraRotation;
+                fpsText.text = getText();
             }
         }
     }

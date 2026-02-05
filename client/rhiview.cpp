@@ -2,6 +2,7 @@
 #include "rhirender.h"
 #include <QtCore/QRunnable>
 #include <QtCore/qnamespace.h>
+#include <QtGui/qcolor.h>
 
 RHIView::RHIView() {
   connect(this, &QQuickItem::windowChanged, this,
@@ -14,7 +15,8 @@ void RHIView::handleWindowChanged(QQuickWindow *win) {
             Qt::DirectConnection);
     connect(win, &QQuickWindow::sceneGraphInvalidated, this, &RHIView::cleanup,
             Qt::DirectConnection);
-    win->setColor(Qt::black);
+    // sky blue
+    win->setColor(QColor::fromRgb(160, 217, 239));
   }
 }
 
@@ -55,7 +57,8 @@ void RHIView::sync() {
     // would render the squircle on top (overlay).
     connect(window(), &QQuickWindow::beforeRenderPassRecording, m_rhiRender,
             &RHIRender::mainPassRecordingStart, Qt::DirectConnection);
-    emit rhiRenderReady();
+
+    m_rhiRender->setEngine(m_engine);
   }
   m_rhiRender->setWindow(window());
 }

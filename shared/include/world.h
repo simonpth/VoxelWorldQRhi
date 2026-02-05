@@ -2,6 +2,9 @@
 #define WORLD_H
 
 #include "region.h"
+
+#include <QString>
+#include <QtGui/qvectornd.h>
 #include <memory>
 #include <unordered_map>
 
@@ -11,6 +14,14 @@ struct RegionPos {
 
   bool operator==(const RegionPos &other) const {
     return x == other.x && y == other.y && z == other.z;
+  }
+
+  RegionPos operator+(const RegionPos &other) const {
+    return RegionPos(x + other.x, y + other.y, z + other.z);
+  }
+
+  RegionPos operator-(const RegionPos &other) const {
+    return RegionPos(x - other.x, y - other.y, z - other.z);
   }
 
   RegionPos(int64_t x, int64_t y, int64_t z) : x(x), y(y), z(z) {}
@@ -73,6 +84,36 @@ struct PlayerWorldChunkPos {
   bool operator==(const PlayerWorldChunkPos &other) const {
     return x == other.x && y == other.y && z == other.z;
   }
+
+  PlayerWorldChunkPos operator+(const PlayerWorldChunkPos &other) const {
+    return PlayerWorldChunkPos(x + other.x, y + other.y, z + other.z);
+  }
+
+  PlayerWorldChunkPos operator-(const PlayerWorldChunkPos &other) const {
+    return PlayerWorldChunkPos(x - other.x, y - other.y, z - other.z);
+  }
+
+  PlayerWorldChunkPos operator+=(const PlayerWorldChunkPos &other) {
+    x += other.x;
+    y += other.y;
+    z += other.z;
+    return *this;
+  }
+
+  PlayerWorldChunkPos operator-=(const PlayerWorldChunkPos &other) {
+    x -= other.x;
+    y -= other.y;
+    z -= other.z;
+    return *this;
+  }
+
+  QString toString() const { return QString("%1 %2 %3").arg(x).arg(y).arg(z); }
+};
+
+struct PlayerPos {
+  PlayerWorldChunkPos playerWorldChunkPos;
+  QVector3D localPlayerPosition;
+  QVector3D cameraRotation;
 };
 
 class World {
@@ -80,7 +121,7 @@ public:
   World();
   ~World();
 
-  const Region *getRegion(const RegionPos &pos) const {
+  const Region *region(const RegionPos &pos) const {
     auto it = m_regions.find(pos);
     if (it != m_regions.end()) {
       return it->second.get();
@@ -91,8 +132,10 @@ public:
     m_regions[pos] = std::move(region);
   }
 
-  void generateRegion(const RegionPos &pos);
-  void basicSetup() { generateRegion({0, 0, 0}); }
+  const Region *generateRegion(const RegionPos &pos);
+  void basicSetup();
+
+  const Region *getOrGenerateRegion(const RegionPos &pos);
 
 private:
   std::unordered_map<RegionPos, std::unique_ptr<Region>, RegionPosHash>
