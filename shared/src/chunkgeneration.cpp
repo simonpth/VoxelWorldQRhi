@@ -70,12 +70,15 @@ ChunkGenerator::generateChunk(const WorldChunkPos &chunkPos) {
       double globalZ = static_cast<double>(startZ + z);
 
       double noise = perlin(globalX * frequency, globalZ * frequency);
-      int64_t height = groundLevel + static_cast<int64_t>(noise * amplitude);
+      int64_t height = groundLevel + static_cast<int64_t>((std::pow(2.0, noise)) * amplitude);
 
       for (int y = 0; y < Chunk::CHUNK_SIZE; y++) {
         int64_t globalY = startY + y;
-        if (globalY <= height) {
+        if (globalY < height) {
           chunk->setBlock(x, y, z, Block(1)); // Stone
+        }
+        else if (globalY == height) {
+          chunk->setBlock(x, y, z, Block(2)); // Grass
         } else {
           chunk->setBlock(x, y, z, Block(0)); // Air
         }

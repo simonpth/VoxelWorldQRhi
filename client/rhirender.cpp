@@ -18,10 +18,10 @@
 // verticies for a quad
 // 3 uint32_t per x, y, z
 static uint32_t quadVertices[] = {
-    1, 0, 0, // vertex 0
-    1, 1, 0, // vertex 1
-    0, 0, 0, // vertex 2
-    0, 1, 0  // vertex 3
+    0, 1, 0, // vertex 0
+    0, 0, 0, // vertex 1
+    1, 1, 0, // vertex 2
+    1, 0, 0  // vertex 3
 };
 
 RHIRender::RHIRender(QObject *parent) : QObject(parent) {}
@@ -61,7 +61,12 @@ void RHIRender::frameStart() {
   }
 
   // Chunk mesh updates
-  doOneTaskFromChunkUpdateQueue(resourceUpdates); // this has to happen first
+  for (int i = 0; i < 8; i++) { // limit to 8 chunk mesh updates per frame to avoid stuttering
+    if (m_chunkUpdateQueue.empty()) {
+      break;
+    }
+    doOneTaskFromChunkUpdateQueue(resourceUpdates); // this has to happen first
+  }
   checkRegionUpdates();
 
   // MVP buffer
@@ -107,6 +112,37 @@ void RHIRender::mainPassRecordingStart() {
       if (it->second->chunkMesh->faces[j].vertices.empty()) {
         continue;
       }
+
+      // Face mapping: 0=x+, 1=y+, 2=z+, 3=x-, 4=y-, 5=z-
+      const PlayerWorldChunkPos playerPos = m_engine->gameLoop()->playerWorldChunkPos();
+      switch (j) {
+        case 0:
+          if (it->first.x > playerPos.x)
+            continue; // skip left face if it's facing away
+          break;
+        case 1:
+          if (it->first.y > playerPos.y)
+            continue; // skip bottom face if it's facing away
+          break;
+        case 2:
+          if (it->first.z > playerPos.z)
+            continue; // skip back face if it's facing away
+          break;
+        case 3:
+          if (it->first.x < playerPos.x)
+            continue; // skip right face if it's facing away
+          break;
+        case 4:
+          if (it->first.y < playerPos.y)
+            continue; // skip top face if it's facing away
+          break;
+        case 5:
+          if (it->first.z < playerPos.z)
+            continue; // skip front face if it's facing away
+          break;
+        default:
+          break;
+      }
       const QRhiCommandBuffer::VertexInput chunkMeshVertexInput = {
           it->second->vBuffers[j].get(), 0};
       cb->setVertexInput(1, 1, &chunkMeshVertexInput);
@@ -117,7 +153,7 @@ void RHIRender::mainPassRecordingStart() {
 
   // FPS calculation
   auto now = std::chrono::steady_clock::now();
-  if (false) {
+  if (true) {
     float deltaTime = std::chrono::duration_cast<std::chrono::duration<float>>(
                           now - m_lastFrameTime)
                           .count();
@@ -162,7 +198,7 @@ void RHIRender::initPipeline(QRhi *rhi, QRhiSwapChain *swapChain) {
 
   m_pipeline.reset(rhi->newGraphicsPipeline());
   // backface culling
-  m_pipeline->setCullMode(QRhiGraphicsPipeline::None);
+  m_pipeline->setCullMode(QRhiGraphicsPipeline::Back);
   m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
   m_pipeline->setDepthTest(true);
   m_pipeline->setDepthWrite(true);

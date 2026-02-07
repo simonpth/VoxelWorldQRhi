@@ -33,7 +33,8 @@ void main()
     
     // Simple directional lighting
     vec3 col = v_color.rgb * (diff + ambient);
-    
+    // vec3 col = debugFaceColors[v_face] * (diff + ambient);
+
     // Apply some fake AO/shading based on face to make it look more 3D
     float faceShading = 1.0;
     if(v_face == 1) faceShading = 1.0; // Top

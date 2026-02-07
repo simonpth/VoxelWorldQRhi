@@ -87,7 +87,7 @@ vec3 faceOffset(uint face, vec2 uv)
         return vec3(0.0, uv.x, uv.y); // x+ : yz plane at max x
     }
     if (face == 1u) {
-        return vec3(uv.x, 0.0, uv.y); // y+ : xz plane at max y
+        return vec3(uv.y, 0.0, uv.x); // y+ : xz plane at max y
     }
     if (face == 2u) {
         return vec3(uv.x, uv.y, 0.0); // z+ : xy plane at max z
@@ -96,7 +96,7 @@ vec3 faceOffset(uint face, vec2 uv)
         return vec3(0.0, uv.y, uv.x); // x- : yz plane at min x (swap uv for winding)
     }
     if (face == 4u) {
-        return vec3(uv.y, 0.0, uv.x); // y- : xz plane at min y (swap uv for winding)
+        return vec3(uv.x, 0.0, uv.y); // y- : xz plane at min y (swap uv for winding)
     }
     return vec3(uv.y, uv.x, 0.0); // z- : xy plane at min z (swap uv for winding)
 }

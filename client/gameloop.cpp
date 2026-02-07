@@ -18,7 +18,7 @@ GameLoop::GameLoop(QObject *parent, World *world)
   m_playerPos.localPlayerPosition = QVector3D(0, 0, 0);
   m_playerPos.playerWorldChunkPos = PlayerWorldChunkPos(1, 18, 1);
 
-  setRegionRenderDistance(2);
+  setRegionRenderDistance(0);
 }
 
 GameLoop::~GameLoop() {}
@@ -194,10 +194,10 @@ void GameLoop::updateLocalPlayerPosition() {
 
   if (m_playerPos.localPlayerPosition.x() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(Chunk::CHUNK_SIZE, 0.0f, 0.0f);
-    m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(1, 0, 0);
-    if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE == Region::REGION_SIZE - 1) {
+    if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE == 0) {
       horizontalRegionChanged = true;
     }
+    m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(1, 0, 0);
   }
 
   if (m_playerPos.localPlayerPosition.y() > Chunk::CHUNK_SIZE) {
@@ -220,10 +220,10 @@ void GameLoop::updateLocalPlayerPosition() {
 
   if (m_playerPos.localPlayerPosition.z() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(0.0f, 0.0f, Chunk::CHUNK_SIZE);
-    m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(0, 0, 1);
-    if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE == Region::REGION_SIZE - 1) {
+    if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE == 0) {
       horizontalRegionChanged = true;
     }
+    m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(0, 0, 1);
   }
 
   if (horizontalRegionChanged) {
