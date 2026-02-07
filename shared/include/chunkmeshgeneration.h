@@ -2,8 +2,8 @@
 #define CHUNKMESHGENERATOR_H
 
 #include "chunk.h"
+#include "region.h"
 #include <QDebug>
-#include <QtCore/qtypes.h>
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -60,10 +60,10 @@ public:
     return (high << 32) | low;
   }
 
-  static std::unique_ptr<ChunkMesh> generateChunkMesh(const Chunk *chunk);
+  static std::unique_ptr<ChunkMesh> generateChunkMesh(const Chunk *chunk, const Region* world);
 
 private:
-  static ChunkFaceMesh generateFaceMesh(const Chunk *chunk, uint8_t face);
+  static ChunkFaceMesh generateFaceMesh(const Chunk *chunk, uint8_t face, const Region* world);
 };
 
 #endif // CHUNKMESHGENERATOR_H

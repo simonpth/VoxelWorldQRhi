@@ -1,10 +1,11 @@
 #include "gameloop.h"
+#include "region.h"
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QObject>
 #include <QThread>
 #include <QThreadPool>
-#include <QObject>
 #include <QTransform>
 #include <QtCore/qlogging.h>
 #include <chrono>
@@ -42,7 +43,7 @@ void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
         }
       }
     }
-    if(x != z && z != 0) {
+    if (x != z && z != 0) {
       for (int ix = -z; ix <= z; ix++) {
         for (int iy = 0; iy < REGION_HEIGHT; iy++) {
           m_relativeRegionsRenderedPositions.push_back({ix, iy, x});
@@ -194,8 +195,7 @@ void GameLoop::updateLocalPlayerPosition() {
   if (m_playerPos.localPlayerPosition.x() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(Chunk::CHUNK_SIZE, 0.0f, 0.0f);
     m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(1, 0, 0);
-    if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE ==
-        Region::REGION_SIZE - 1) {
+    if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE == Region::REGION_SIZE - 1) {
       horizontalRegionChanged = true;
     }
   }
@@ -221,8 +221,7 @@ void GameLoop::updateLocalPlayerPosition() {
   if (m_playerPos.localPlayerPosition.z() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(0.0f, 0.0f, Chunk::CHUNK_SIZE);
     m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(0, 0, 1);
-    if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE ==
-        Region::REGION_SIZE - 1) {
+    if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE == Region::REGION_SIZE - 1) {
       horizontalRegionChanged = true;
     }
   }
@@ -250,8 +249,7 @@ void GameLoop::updateRegionsRendered() {
     if (!m_world->region(targetRegion)) {
       QThreadPool::globalInstance()->start([this, targetRegion]() {
         m_world->generateRegion(targetRegion);
-        qDebug() << "Generated region at" << targetRegion.x << targetRegion.y
-                 << targetRegion.z;
+
         emit regionGenerated(targetRegion);
       });
     }

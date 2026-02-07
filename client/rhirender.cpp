@@ -251,7 +251,6 @@ void RHIRender::doOneTaskFromChunkUpdateQueue(
         m_renderChunkMeshes[chunkPos]->vBuffers[i].get(),
         m_renderChunkMeshes[chunkPos]->chunkMesh->faces[i].vertices.data());
   }
-  qDebug() << "Updated chunk mesh at" << chunkPos.x << chunkPos.y << chunkPos.z;
 }
 
 void RHIRender::checkRegionUpdates() {
@@ -297,7 +296,8 @@ void RHIRender::updateRelativeChunkPosUbuf(
 
 void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
   QThreadPool::globalInstance()->start([this, regionPos]() {
-    const Region *region = m_engine->world()->region(regionPos);
+    Region *region = m_engine->world()->region(regionPos);
+    auto readLock = region->claimReadLock();
 
     if (!region) {
       qWarning() << "Region not found in generateChunkMeshesForRegion";
@@ -311,7 +311,7 @@ void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
           if (!m_renderChunkMeshes.count(chunkPos)) {
             addChunkUpdateTask(
                 chunkPos, false,
-                ChunkMeshGenerator::generateChunkMesh(region->chunk(x, y, z)));
+                ChunkMeshGenerator::generateChunkMesh(region->chunk(x, y, z), region));
           }
         }
       }

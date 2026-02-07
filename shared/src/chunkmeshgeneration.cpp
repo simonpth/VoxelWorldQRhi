@@ -1,14 +1,15 @@
 #include "chunkmeshgeneration.h"
 #include "block.h"
+#include "region.h"
 #include <QtCore/qlogging.h>
 
 // TODO: for now only face culling
 
 std::unique_ptr<ChunkMesh>
-ChunkMeshGenerator::generateChunkMesh(const Chunk *chunk) {
+ChunkMeshGenerator::generateChunkMesh(const Chunk *chunk, const Region* region) {
   std::unique_ptr<ChunkMesh> chunkMesh = std::make_unique<ChunkMesh>();
   for (uint8_t face = 0; face < 6; face++) {
-    chunkMesh->faces[face] = generateFaceMesh(chunk, face);
+    chunkMesh->faces[face] = generateFaceMesh(chunk, face, region);
   }
   return std::move(chunkMesh);
 }
@@ -46,7 +47,7 @@ static const int faceOffsets[6][3] = {
 };
 
 ChunkFaceMesh ChunkMeshGenerator::generateFaceMesh(const Chunk *chunk,
-                                                   uint8_t face) {
+                                                   uint8_t face, const Region* region) {
   ChunkFaceMesh faceMesh;
 
   for (uint8_t i = 0; i < Chunk::CHUNK_SIZE; i++) {

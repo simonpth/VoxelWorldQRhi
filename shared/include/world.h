@@ -125,7 +125,7 @@ public:
   World();
   ~World();
 
-  const Region *region(const RegionPos &pos) {
+  Region *region(const RegionPos &pos) {
     std::lock_guard<std::mutex> lock(m_regionsMutex);
     auto it = m_regions.find(pos);
     if (it != m_regions.end()) {
