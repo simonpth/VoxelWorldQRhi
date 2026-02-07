@@ -3,14 +3,21 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QThread>
+#include <QThreadPool>
+#include <QObject>
 #include <QTransform>
+#include <QtCore/qlogging.h>
 #include <chrono>
 #include <cstdint>
 
 GameLoop::GameLoop(QObject *parent, World *world)
     : QObject(parent), m_world(world) {
   // also creates inital relative regions rendered positions
-  setRegionRenderDistance(4);
+
+  m_playerPos.localPlayerPosition = QVector3D(0, 0, 0);
+  m_playerPos.playerWorldChunkPos = PlayerWorldChunkPos(1, 18, 1);
+
+  setRegionRenderDistance(2);
 }
 
 GameLoop::~GameLoop() {}
@@ -18,10 +25,6 @@ GameLoop::~GameLoop() {}
 const int REGION_HEIGHT = 8; // 1024 blocks high
 
 void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
-  if (regionRenderDistance == m_regionRenderDistance) {
-    return;
-  }
-
   m_regionRenderDistance = regionRenderDistance;
 
   m_relativeRegionsRenderedPositions.clear();
@@ -34,13 +37,19 @@ void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
     for (int ix = -x; ix <= x; ix++) {
       for (int iy = 0; iy < REGION_HEIGHT; iy++) {
         m_relativeRegionsRenderedPositions.push_back({ix, iy, z});
-        m_relativeRegionsRenderedPositions.push_back({ix, iy, -z});
+        if (z != 0) {
+          m_relativeRegionsRenderedPositions.push_back({ix, iy, -z});
+        }
       }
     }
-    for (int ix = -z; ix <= z; ix++) {
-      for (int iy = 0; iy < REGION_HEIGHT; iy++) {
-        m_relativeRegionsRenderedPositions.push_back({ix, iy, x});
-        m_relativeRegionsRenderedPositions.push_back({ix, iy, -x});
+    if(x != z && z != 0) {
+      for (int ix = -z; ix <= z; ix++) {
+        for (int iy = 0; iy < REGION_HEIGHT; iy++) {
+          m_relativeRegionsRenderedPositions.push_back({ix, iy, x});
+          if (x != 0) {
+            m_relativeRegionsRenderedPositions.push_back({ix, iy, -x});
+          }
+        }
       }
     }
 
@@ -227,19 +236,24 @@ void GameLoop::updateRegionsRendered() {
   std::lock_guard<std::mutex> lock(m_regionsRenderedMutex);
 
   m_regionsRendered.clear();
-  // m_regionsRendered.resize(m_relativeRegionsRenderedPositions.size());
 
   RegionPos playerRegionPos =
       RegionPos(m_playerPos.playerWorldChunkPos.x / Region::REGION_SIZE,
                 m_playerPos.playerWorldChunkPos.y / Region::REGION_SIZE,
                 m_playerPos.playerWorldChunkPos.z / Region::REGION_SIZE);
 
-  // loop through all relative regions rendered positions
   for (const auto &relativeRegionPos : m_relativeRegionsRenderedPositions) {
-    m_regionsRendered.push_back(playerRegionPos + relativeRegionPos);
+    RegionPos targetRegion = relativeRegionPos.addHorizontal(playerRegionPos);
 
-    if (!m_world->region(m_regionsRendered.back())) {
-      // m_world->generateRegion(m_regionsRendered.back());
+    m_regionsRendered.push_back(targetRegion);
+
+    if (!m_world->region(targetRegion)) {
+      QThreadPool::globalInstance()->start([this, targetRegion]() {
+        m_world->generateRegion(targetRegion);
+        qDebug() << "Generated region at" << targetRegion.x << targetRegion.y
+                 << targetRegion.z;
+        emit regionGenerated(targetRegion);
+      });
     }
   }
 

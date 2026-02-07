@@ -25,6 +25,10 @@ struct RegionPos {
   }
 
   RegionPos(int64_t x, int64_t y, int64_t z) : x(x), y(y), z(z) {}
+
+  RegionPos addHorizontal(const RegionPos &other) const {
+    return RegionPos(x + other.x, y, z + other.z);
+  }
 };
 
 struct RegionPosHash {
@@ -121,7 +125,8 @@ public:
   World();
   ~World();
 
-  const Region *region(const RegionPos &pos) const {
+  const Region *region(const RegionPos &pos) {
+    std::lock_guard<std::mutex> lock(m_regionsMutex);
     auto it = m_regions.find(pos);
     if (it != m_regions.end()) {
       return it->second.get();
@@ -129,15 +134,14 @@ public:
     return nullptr;
   }
   void setRegion(const RegionPos &pos, std::unique_ptr<Region> region) {
+    std::lock_guard<std::mutex> lock(m_regionsMutex);
     m_regions[pos] = std::move(region);
   }
 
   const Region *generateRegion(const RegionPos &pos);
-  void basicSetup();
-
-  const Region *getOrGenerateRegion(const RegionPos &pos);
 
 private:
+  std::mutex m_regionsMutex;
   std::unordered_map<RegionPos, std::unique_ptr<Region>, RegionPosHash>
       m_regions;
 };

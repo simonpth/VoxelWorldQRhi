@@ -24,7 +24,7 @@ public:
   void startGameLoop();
   void stopGameLoop();
 
-  GameLoop *gameLoop() const { return m_gameLoop; }
+  GameLoop *gameLoop() const { return m_gameLoop.get(); }
 
   World *world() const { return m_world.get(); }
 
@@ -35,7 +35,7 @@ private:
   std::unique_ptr<World> m_world;
 
   QThread m_gameLoopThread;
-  GameLoop *m_gameLoop;
+  std::unique_ptr<GameLoop> m_gameLoop;
 };
 
 #endif // ENGINE_H

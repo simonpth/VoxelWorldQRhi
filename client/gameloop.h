@@ -73,6 +73,9 @@ public slots:
 private slots:
   void mainLoop();
 
+signals:
+  void regionGenerated(const RegionPos &regionPos);
+
 private:
   World *m_world;
 

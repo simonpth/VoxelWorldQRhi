@@ -3,6 +3,7 @@
 #include <QtCore/QRunnable>
 #include <QtCore/qnamespace.h>
 #include <QtGui/qcolor.h>
+#include <QtQuick/QQuickGraphicsConfiguration>
 
 RHIView::RHIView() {
   connect(this, &QQuickItem::windowChanged, this,
@@ -11,6 +12,11 @@ RHIView::RHIView() {
 
 void RHIView::handleWindowChanged(QQuickWindow *win) {
   if (win) {
+    // Disable VSync by setting swap interval to 0
+    QSurfaceFormat format = win->format();
+    format.setSwapInterval(0);
+    win->setFormat(format);
+
     connect(win, &QQuickWindow::beforeSynchronizing, this, &RHIView::sync,
             Qt::DirectConnection);
     connect(win, &QQuickWindow::sceneGraphInvalidated, this, &RHIView::cleanup,
