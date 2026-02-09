@@ -356,7 +356,6 @@ void RHIRender::updateRelativeChunkPosUbuf(
 }
 
 void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
-  return;
   QThreadPool::globalInstance()->start([this, regionPos]() {
     Region *region = m_engine->world()->region(regionPos);
     auto readLock = region->claimReadLock();
