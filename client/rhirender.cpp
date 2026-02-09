@@ -3,6 +3,7 @@
 #include "world.h"
 #include <QFile>
 #include <QtCore/qdebug.h>
+#include <QtCore/qlogging.h>
 #include <QtCore/qtypes.h>
 #include <QtGui/qmatrix4x4.h>
 #include <QtQuick/qquickwindow.h>
@@ -61,10 +62,7 @@ void RHIRender::frameStart() {
   }
 
   // Chunk mesh updates
-  for (int i = 0; i < 8; i++) { // limit to 8 chunk mesh updates per frame to avoid stuttering
-    if (m_chunkUpdateQueue.empty()) {
-      break;
-    }
+  for (int i = 0; i < 32 && !m_chunkUpdateQueue.empty(); i++) {
     doOneTaskFromChunkUpdateQueue(resourceUpdates); // this has to happen first
   }
   checkRegionUpdates();
@@ -96,15 +94,22 @@ void RHIRender::mainPassRecordingStart() {
   cb->setGraphicsPipeline(m_pipeline.get());
 
   // draw chunk meshes using instancing
-  if (false) {
-    qDebug() << "Render chunk meshes:" << m_renderChunkMeshes.size();
-  }
 
   const QRhiCommandBuffer::VertexInput quadVertexInput = {m_quadVBuf.get(), 0};
   cb->setVertexInput(0, 1, &quadVertexInput);
 
+  // Get player position once for frustum culling
+  const PlayerWorldChunkPos playerPos = m_engine->gameLoop()->playerWorldChunkPos();
+
+  int renderedChunks = 0;
+
   auto it = m_renderChunkMeshes.begin();
   for (int i = 0; i < m_renderChunkMeshes.size(); i++) {
+    // Frustum culling: skip chunks outside the view frustum
+    if (!isChunkInFrustum(it->first, playerPos)) {
+      ++it;
+      continue;
+    }
 
     cb->setShaderResources(it->second->m_srb.get());
 
@@ -113,8 +118,9 @@ void RHIRender::mainPassRecordingStart() {
         continue;
       }
 
+      renderedChunks++;
+
       // Face mapping: 0=x+, 1=y+, 2=z+, 3=x-, 4=y-, 5=z-
-      const PlayerWorldChunkPos playerPos = m_engine->gameLoop()->playerWorldChunkPos();
       switch (j) {
         case 0:
           if (it->first.x > playerPos.x)
@@ -150,6 +156,7 @@ void RHIRender::mainPassRecordingStart() {
     }
     ++it;
   }
+  //qDebug() << "Rendered chunks:" << renderedChunks;
 
   // FPS calculation
   auto now = std::chrono::steady_clock::now();
@@ -250,6 +257,9 @@ void RHIRender::updateMVPBuffer(QRhi *rhi, QRhiSwapChain *swapChain,
 
   mvp = rhi->clipSpaceCorrMatrix() * mvp;
 
+  // Extract frustum planes for culling
+  extractFrustumPlanes(mvp);
+
   resourceUpdates->updateDynamicBuffer(m_ubuf.get(), 0, 64, mvp.data());
 }
 
@@ -291,6 +301,8 @@ void RHIRender::doOneTaskFromChunkUpdateQueue(
 
 void RHIRender::checkRegionUpdates() {
   if (m_engine->gameLoop()->regionsRenderedDirty()) {
+    m_engine->gameLoop()->setRegionsRenderedDirty(false);
+
     auto regionsRendered = m_engine->gameLoop()->regionsRendered();
     for (auto &regionPos : regionsRendered) {
       if (!m_renderChunkMeshes.count(WorldChunkPos(regionPos, {0, 0, 0}))) {
@@ -302,7 +314,20 @@ void RHIRender::checkRegionUpdates() {
         generateChunkMeshesForRegionAsync(regionPos);
       }
     }
-    m_engine->gameLoop()->setRegionsRenderedDirty(false);
+
+    // Remove chunk meshes that are no longer in rendered regions
+    std::vector<WorldChunkPos> chunkMeshesToRemove;
+    for (const auto &entry : m_renderChunkMeshes) {
+      WorldChunkPos chunkPos = entry.first;
+      RegionPos chunkRegionPos = World::worldChunkPosToRegionPos(chunkPos);
+      if (std::find(regionsRendered.begin(), regionsRendered.end(), chunkRegionPos) ==
+          regionsRendered.end()) {
+        chunkMeshesToRemove.push_back(chunkPos);
+      }
+    }
+    for (const auto &chunkPos : chunkMeshesToRemove) {
+      addChunkUpdateTask(chunkPos, true, nullptr); // remove this chunk mesh
+    }
   }
 }
 
@@ -347,7 +372,8 @@ void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
           if (!m_renderChunkMeshes.count(chunkPos)) {
             addChunkUpdateTask(
                 chunkPos, false,
-                ChunkMeshGenerator::generateChunkMesh(region->chunk(x, y, z), region));
+                ChunkMeshGenerator::generateChunkMesh(region->chunk(x, y, z), region,
+                                                     ChunkPos(x, y, z)));
           }
         }
       }
@@ -356,5 +382,118 @@ void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
 }
 
 void RHIRender::onRegionGenerated(const RegionPos &regionPos) {
+  auto regionsRendered = m_engine->gameLoop()->regionsRendered();
+  if(std::find(regionsRendered.begin(), regionsRendered.end(), regionPos) ==
+     regionsRendered.end()) {
+    // this region is not in the rendered regions, so we don't need to generate chunk meshes for it
+    return;
+  }
   generateChunkMeshesForRegionAsync(regionPos);
+}
+
+// FRUSTUM CULLING IMPLEMENTATION -------------------------------------
+
+void RHIRender::extractFrustumPlanes(const QMatrix4x4 &mvp) {
+  // Extract the 6 frustum planes from the MVP matrix
+  // Plane coefficients are extracted from the rows of the MVP matrix
+  // The planes are: left, right, bottom, top, near, far
+
+  const float *m = mvp.data();
+
+  // Left plane: row 3 + row 0
+  m_frustumPlanes[0].a = m[3] + m[0];
+  m_frustumPlanes[0].b = m[7] + m[4];
+  m_frustumPlanes[0].c = m[11] + m[8];
+  m_frustumPlanes[0].d = m[15] + m[12];
+
+  // Right plane: row 3 - row 0
+  m_frustumPlanes[1].a = m[3] - m[0];
+  m_frustumPlanes[1].b = m[7] - m[4];
+  m_frustumPlanes[1].c = m[11] - m[8];
+  m_frustumPlanes[1].d = m[15] - m[12];
+
+  // Bottom plane: row 3 + row 1
+  m_frustumPlanes[2].a = m[3] + m[1];
+  m_frustumPlanes[2].b = m[7] + m[5];
+  m_frustumPlanes[2].c = m[11] + m[9];
+  m_frustumPlanes[2].d = m[15] + m[13];
+
+  // Top plane: row 3 - row 1
+  m_frustumPlanes[3].a = m[3] - m[1];
+  m_frustumPlanes[3].b = m[7] - m[5];
+  m_frustumPlanes[3].c = m[11] - m[9];
+  m_frustumPlanes[3].d = m[15] - m[13];
+
+  // Near plane: row 3 + row 2
+  m_frustumPlanes[4].a = m[3] + m[2];
+  m_frustumPlanes[4].b = m[7] + m[6];
+  m_frustumPlanes[4].c = m[11] + m[10];
+  m_frustumPlanes[4].d = m[15] + m[14];
+
+  // Far plane: row 3 - row 2
+  m_frustumPlanes[5].a = m[3] - m[2];
+  m_frustumPlanes[5].b = m[7] - m[6];
+  m_frustumPlanes[5].c = m[11] - m[10];
+  m_frustumPlanes[5].d = m[15] - m[14];
+
+  // Normalize planes (optional but improves precision)
+  for (int i = 0; i < 6; i++) {
+    float length = std::sqrt(m_frustumPlanes[i].a * m_frustumPlanes[i].a +
+                             m_frustumPlanes[i].b * m_frustumPlanes[i].b +
+                             m_frustumPlanes[i].c * m_frustumPlanes[i].c);
+    if (length > 0.0f) {
+      m_frustumPlanes[i].a /= length;
+      m_frustumPlanes[i].b /= length;
+      m_frustumPlanes[i].c /= length;
+      m_frustumPlanes[i].d /= length;
+    }
+  }
+}
+
+AABB RHIRender::getChunkAABB(const WorldChunkPos &chunkPos, const PlayerWorldChunkPos &playerPos) const {
+  // Calculate the chunk's position relative to the player's chunk
+  // The frustum is in "local player space" where the player's chunk is at origin
+  int relX = static_cast<int>(chunkPos.x - playerPos.x) * Chunk::CHUNK_SIZE;
+  int relY = static_cast<int>(chunkPos.y - playerPos.y) * Chunk::CHUNK_SIZE;
+  int relZ = static_cast<int>(chunkPos.z - playerPos.z) * Chunk::CHUNK_SIZE;
+
+  return {
+    relX,           // minX
+    relY,           // minY
+    relZ,           // minZ
+    relX + Chunk::CHUNK_SIZE,  // maxX
+    relY + Chunk::CHUNK_SIZE,  // maxY
+    relZ + Chunk::CHUNK_SIZE   // maxZ
+  };
+}
+
+bool RHIRender::isChunkInFrustum(const WorldChunkPos &chunkPos, const PlayerWorldChunkPos &playerPos) const {
+  AABB aabb = getChunkAABB(chunkPos, playerPos);
+
+  // Test the AABB against all 6 frustum planes
+  // Using the "positive vertex" approach: for each plane, we find the vertex
+  // of the AABB that is most aligned with the plane normal (the positive vertex)
+  // If the positive vertex is outside, the entire box is outside
+
+  for (int i = 0; i < 6; i++) {
+    const FrustumPlane &plane = m_frustumPlanes[i];
+
+    // Select the positive vertex based on the plane normal direction
+    // For a plane with normal (a, b, c), the positive vertex is:
+    // (minX if a < 0 else maxX, minY if b < 0 else maxY, minZ if c < 0 else maxZ)
+    int positiveX = (plane.a < 0.0f) ? aabb.minX : aabb.maxX;
+    int positiveY = (plane.b < 0.0f) ? aabb.minY : aabb.maxY;
+    int positiveZ = (plane.c < 0.0f) ? aabb.minZ : aabb.maxZ;
+
+    // Compute the signed distance from the plane to the positive vertex
+    float distance = plane.a * positiveX + plane.b * positiveY + plane.c * positiveZ + plane.d;
+
+    // If the positive vertex is outside (distance < 0), the entire box is outside
+    if (distance < 0.0f) {
+      return false;
+    }
+  }
+
+  // The chunk is inside or intersecting the frustum
+  return true;
 }

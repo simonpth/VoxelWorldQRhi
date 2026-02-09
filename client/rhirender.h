@@ -11,6 +11,18 @@
 #include "world.h"
 #include <deque>
 #include <unordered_map>
+#include <array>
+
+// Frustum plane: ax + by + cz + d = 0
+struct FrustumPlane {
+    float a, b, c, d;
+};
+
+// Axis-aligned bounding box using integers (chunk corners are always multiples of 32)
+struct AABB {
+    int minX, minY, minZ;
+    int maxX, maxY, maxZ;
+};
 
 struct RenderChunkMesh {
   std::unique_ptr<ChunkMesh> chunkMesh;
@@ -75,6 +87,11 @@ private:
 
   void generateChunkMeshesForRegionAsync(const RegionPos &regionPos);
 
+  // Frustum culling helper functions
+  void extractFrustumPlanes(const QMatrix4x4 &mvp);
+  AABB getChunkAABB(const WorldChunkPos &chunkPos, const PlayerWorldChunkPos &playerPos) const;
+  bool isChunkInFrustum(const WorldChunkPos &chunkPos, const PlayerWorldChunkPos &playerPos) const;
+
 public:
   void setEngine(const Engine *engine) {
     m_engine = engine;
@@ -113,6 +130,9 @@ private:
   std::chrono::steady_clock::time_point m_lastFrameTime;
   std::deque<std::chrono::steady_clock::time_point> m_frameTimes;
   float m_fps = 0.0f;
+
+  // Frustum planes for culling (updated each frame)
+  std::array<FrustumPlane, 6> m_frustumPlanes;
 };
 
 #endif // RHIRENDER_H

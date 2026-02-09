@@ -18,12 +18,10 @@ GameLoop::GameLoop(QObject *parent, World *world)
   m_playerPos.localPlayerPosition = QVector3D(0, 0, 0);
   m_playerPos.playerWorldChunkPos = PlayerWorldChunkPos(1, 18, 1);
 
-  setRegionRenderDistance(0);
+  setRegionRenderDistance(7);
 }
 
 GameLoop::~GameLoop() {}
-
-const int REGION_HEIGHT = 8; // 1024 blocks high
 
 void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
   m_regionRenderDistance = regionRenderDistance;
@@ -36,7 +34,7 @@ void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
 
   while (x >= z) {
     for (int ix = -x; ix <= x; ix++) {
-      for (int iy = 0; iy < REGION_HEIGHT; iy++) {
+      for (int iy = -1; iy <= 1; iy++) {
         m_relativeRegionsRenderedPositions.push_back({ix, iy, z});
         if (z != 0) {
           m_relativeRegionsRenderedPositions.push_back({ix, iy, -z});
@@ -45,7 +43,7 @@ void GameLoop::setRegionRenderDistance(uint32_t regionRenderDistance) {
     }
     if (x != z && z != 0) {
       for (int ix = -z; ix <= z; ix++) {
-        for (int iy = 0; iy < REGION_HEIGHT; iy++) {
+        for (int iy = -1; iy <= 1; iy++) {
           m_relativeRegionsRenderedPositions.push_back({ix, iy, x});
           if (x != 0) {
             m_relativeRegionsRenderedPositions.push_back({ix, iy, -x});
@@ -173,7 +171,7 @@ void GameLoop::updatePlayerVelocity() {
 
     QVector3D finalDir(rotatedFlat.x(), wishDir.y(), rotatedFlat.y());
 
-    float acceleration = 0.20f; // Base acceleration
+    float acceleration = 1.20f; // Base acceleration
     if (m_playerInput.ctrlPressed) {
       acceleration *= 2.0f;
     }
@@ -183,19 +181,19 @@ void GameLoop::updatePlayerVelocity() {
 }
 
 void GameLoop::updateLocalPlayerPosition() {
-  bool horizontalRegionChanged = false;
+  bool regionChanged = false;
   if (m_playerPos.localPlayerPosition.x() > Chunk::CHUNK_SIZE) {
     m_playerPos.localPlayerPosition -= QVector3D(Chunk::CHUNK_SIZE, 0.0f, 0.0f);
     m_playerPos.playerWorldChunkPos += PlayerWorldChunkPos(1, 0, 0);
     if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE == 0) {
-      horizontalRegionChanged = true;
+      regionChanged = true;
     }
   }
 
   if (m_playerPos.localPlayerPosition.x() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(Chunk::CHUNK_SIZE, 0.0f, 0.0f);
     if (m_playerPos.playerWorldChunkPos.x % Region::REGION_SIZE == 0) {
-      horizontalRegionChanged = true;
+      regionChanged = true;
     }
     m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(1, 0, 0);
   }
@@ -203,10 +201,16 @@ void GameLoop::updateLocalPlayerPosition() {
   if (m_playerPos.localPlayerPosition.y() > Chunk::CHUNK_SIZE) {
     m_playerPos.localPlayerPosition -= QVector3D(0.0f, Chunk::CHUNK_SIZE, 0.0f);
     m_playerPos.playerWorldChunkPos += PlayerWorldChunkPos(0, 1, 0);
+    if (m_playerPos.playerWorldChunkPos.y % Region::REGION_SIZE == 0) {
+      regionChanged = true;
+    }
   }
 
   if (m_playerPos.localPlayerPosition.y() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(0.0f, Chunk::CHUNK_SIZE, 0.0f);
+    if (m_playerPos.playerWorldChunkPos.y % Region::REGION_SIZE == 0) {
+      regionChanged = true;
+    }
     m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(0, 1, 0);
   }
 
@@ -214,19 +218,19 @@ void GameLoop::updateLocalPlayerPosition() {
     m_playerPos.localPlayerPosition -= QVector3D(0.0f, 0.0f, Chunk::CHUNK_SIZE);
     m_playerPos.playerWorldChunkPos += PlayerWorldChunkPos(0, 0, 1);
     if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE == 0) {
-      horizontalRegionChanged = true;
+      regionChanged = true;
     }
   }
 
   if (m_playerPos.localPlayerPosition.z() < 0) {
     m_playerPos.localPlayerPosition += QVector3D(0.0f, 0.0f, Chunk::CHUNK_SIZE);
     if (m_playerPos.playerWorldChunkPos.z % Region::REGION_SIZE == 0) {
-      horizontalRegionChanged = true;
+      regionChanged = true;
     }
     m_playerPos.playerWorldChunkPos -= PlayerWorldChunkPos(0, 0, 1);
   }
 
-  if (horizontalRegionChanged) {
+  if (regionChanged) {
     updateRegionsRendered();
   }
 }
@@ -236,13 +240,10 @@ void GameLoop::updateRegionsRendered() {
 
   m_regionsRendered.clear();
 
-  RegionPos playerRegionPos =
-      RegionPos(m_playerPos.playerWorldChunkPos.x / Region::REGION_SIZE,
-                m_playerPos.playerWorldChunkPos.y / Region::REGION_SIZE,
-                m_playerPos.playerWorldChunkPos.z / Region::REGION_SIZE);
+  RegionPos playerRegionPos = World::worldChunkPosToRegionPos(m_playerPos.playerWorldChunkPos);
 
   for (const auto &relativeRegionPos : m_relativeRegionsRenderedPositions) {
-    RegionPos targetRegion = relativeRegionPos.addHorizontal(playerRegionPos);
+    RegionPos targetRegion = relativeRegionPos  + playerRegionPos;
 
     m_regionsRendered.push_back(targetRegion);
 

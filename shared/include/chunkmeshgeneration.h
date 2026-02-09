@@ -60,10 +60,8 @@ public:
     return (high << 32) | low;
   }
 
-  static std::unique_ptr<ChunkMesh> generateChunkMesh(const Chunk *chunk, const Region* world);
-
-private:
-  static ChunkFaceMesh generateFaceMesh(const Chunk *chunk, uint8_t face, const Region* world);
+  static std::unique_ptr<ChunkMesh> generateChunkMesh(const Chunk *chunk, const Region* region,
+                                                      const ChunkPos &chunkPos);
 };
 
 #endif // CHUNKMESHGENERATOR_H

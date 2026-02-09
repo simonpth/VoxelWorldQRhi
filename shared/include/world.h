@@ -5,6 +5,7 @@
 
 #include <QString>
 #include <QtGui/qvectornd.h>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 
@@ -139,6 +140,23 @@ public:
   }
 
   const Region *generateRegion(const RegionPos &pos);
+
+  static int64_t floorDiv(int64_t a, int64_t b) {
+    int64_t div = a / b;
+    if (a < 0 && a % b != 0) --div;
+    return div;
+  };
+
+  static RegionPos worldChunkPosToRegionPos(const WorldChunkPos &chunkPos) {
+    return RegionPos(floorDiv(chunkPos.x, Region::REGION_SIZE),
+                     floorDiv(chunkPos.y, Region::REGION_SIZE),
+                     floorDiv(chunkPos.z, Region::REGION_SIZE));
+  }
+  static RegionPos worldChunkPosToRegionPos(const PlayerWorldChunkPos &chunkPos) {
+    return RegionPos(floorDiv(chunkPos.x, Region::REGION_SIZE),
+                     floorDiv(chunkPos.y, Region::REGION_SIZE),
+                     floorDiv(chunkPos.z, Region::REGION_SIZE));
+  }
 
 private:
   std::mutex m_regionsMutex;
