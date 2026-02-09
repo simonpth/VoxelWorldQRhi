@@ -68,9 +68,9 @@ void RHIRender::frameStart() {
   checkRegionUpdates();
 
   // MVP buffer
+  updateRelativeChunkPosUbuf(resourceUpdates);
   updateMVPBuffer(rhi, swapChain, resourceUpdates);
 
-  updateRelativeChunkPosUbuf(resourceUpdates);
 
   swapChain->currentFrameCommandBuffer()->resourceUpdate(resourceUpdates);
 }
@@ -356,6 +356,7 @@ void RHIRender::updateRelativeChunkPosUbuf(
 }
 
 void RHIRender::generateChunkMeshesForRegionAsync(const RegionPos &regionPos) {
+  return;
   QThreadPool::globalInstance()->start([this, regionPos]() {
     Region *region = m_engine->world()->region(regionPos);
     auto readLock = region->claimReadLock();

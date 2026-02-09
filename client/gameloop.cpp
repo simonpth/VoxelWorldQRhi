@@ -18,7 +18,7 @@ GameLoop::GameLoop(QObject *parent, World *world)
   m_playerPos.localPlayerPosition = QVector3D(0, 0, 0);
   m_playerPos.playerWorldChunkPos = PlayerWorldChunkPos(1, 18, 1);
 
-  setRegionRenderDistance(7);
+  setRegionRenderDistance(3);
 }
 
 GameLoop::~GameLoop() {}
